@@ -52,6 +52,8 @@ jobs:
 
       - name: Build Module
         working-directory: ./randompin
+        env:
+          ANDROID_SDK: ${{ env.ANDROID_HOME }}
         run: |
           chmod +x build.sh
           ./build.sh
