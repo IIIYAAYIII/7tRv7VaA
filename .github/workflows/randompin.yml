@@ -54,12 +54,12 @@ jobs:
         working-directory: ./randompin
         run: |
           gradle wrapper
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug
 
       - name: Rename APK Artifact
         working-directory: ./randompin
         run: |
-          mv app/build/outputs/apk/release/app-release-unsigned.apk randompin-v${{ steps.version.outputs.new_ver }}-unsigned.apk
+          mv app/build/outputs/apk/debug/app-debug.apk randompin-v${{ steps.version.outputs.new_ver }}.apk
 
       - name: Create GitHub Release and Upload APK
         uses: softprops/action-gh-release@v2
@@ -68,7 +68,7 @@ jobs:
           name: RandomPIN v${{ steps.version.outputs.new_ver }}
           draft: false
           prerelease: false
-          files: randompin/randompin-v${{ steps.version.outputs.new_ver }}-unsigned.apk
+          files: randompin/randompin-v${{ steps.version.outputs.new_ver }}.apk
 
       - name: Commit and push version bump
         run: |
