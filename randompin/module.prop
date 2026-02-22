@@ -1,7 +1,7 @@
 id=randompin
 name=Random PIN & Double Tap Lock
-version=1.0
-versionCode=10
+version=1.1
+versionCode=11
 author=Developer
 description=锁屏PIN码乱序显示，防止被偷窥猜中密码。支持双击屏幕空白处锁定屏幕。支持安卓10-16。
 minApi=29
