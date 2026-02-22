@@ -1,0 +1,77 @@
+name: Build RandomPIN
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate new version
+        id: version
+        run: |
+          # Read current version from module.prop
+          CURRENT_VERSION=$(grep -oP '^version=\K.*' randompin/module.prop)
+          CURRENT_VCODE=$(grep -oP '^versionCode=\K.*' randompin/module.prop)
+          
+          # Increment version by 0.1 using awk
+          NEW_VERSION=$(awk -v ver="$CURRENT_VERSION" 'BEGIN {print ver + 0.1}')
+          NEW_VCODE=$((CURRENT_VCODE + 1))
+          
+          echo "Current version: $CURRENT_VERSION ($CURRENT_VCODE)"
+          echo "New version: $NEW_VERSION ($NEW_VCODE)"
+          
+          # Write back to module.prop
+          sed -i "s/^version=.*/version=$NEW_VERSION/" randompin/module.prop
+          sed -i "s/^versionCode=.*/versionCode=$NEW_VCODE/" randompin/module.prop
+          
+          # Export to output
+          echo "old_ver=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new_ver=$NEW_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android Build Tools
+        run: |
+          sdkmanager "build-tools;35.0.0" "platforms;android-35"
+
+      - name: Build Module
+        working-directory: ./randompin
+        run: |
+          chmod +x build.sh
+          ./build.sh
+          
+          # Rename the artifact zip to include the new version
+          mv randompin-*.zip randompin-${{ steps.version.outputs.new_ver }}.zip
+          echo "Renamed artifact to randompin-${{ steps.version.outputs.new_ver }}.zip"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: randompin-module
+          path: randompin/randompin-${{ steps.version.outputs.new_ver }}.zip
+          retention-days: 7
+
+      - name: Commit and push version bump
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add randompin/module.prop
+          # Only commit if there are changes
+          git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.new_ver }}"
+          git push
