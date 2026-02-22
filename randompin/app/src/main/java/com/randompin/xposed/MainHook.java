@@ -38,6 +38,17 @@ public class MainHook implements IXposedHookLoadPackage {
             return;
         }
 
+        // Hook 模块自身的 UI界面，用于向用户展示“已激活”状态
+        if (lpparam.packageName.equals("com.randompin.xposed")) {
+            XposedHelpers.findAndHookMethod(
+                "com.randompin.xposed.SettingsActivity",
+                lpparam.classLoader,
+                "isModuleActive",
+                de.robv.android.xposed.XC_MethodReplacement.returnConstant(true)
+            );
+            return;
+        }
+
         if (!lpparam.packageName.equals("com.android.systemui")) {
             return;
         }
