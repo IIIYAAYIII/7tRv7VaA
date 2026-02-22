@@ -82,7 +82,9 @@ convert_to_dex() {
     mkdir -p "$(dirname "$DEX_FILE")"
     
     if [ -n "$D8" ] && command -v $D8 &> /dev/null; then
-        $D8 --output "$BUILD_DIR" "$BUILD_DIR/classes"/*.class
+        # Find all class files across subdirectories
+        CLASS_FILES=$(find "$BUILD_DIR/classes" -name "*.class")
+        $D8 --output "$BUILD_DIR" $CLASS_FILES
         cp "$BUILD_DIR/classes.dex" "$DEX_FILE"
     elif command -v dx &> /dev/null; then
         dx --dex --output="$DEX_FILE" "$BUILD_DIR/classes"
