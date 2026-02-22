@@ -10,8 +10,8 @@ android {
         applicationId = "com.randompin.xposed"
         minSdk = 29
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.4"
+        versionCode = 16
+        versionName = "1.6"
     }
 
     signingConfigs {
