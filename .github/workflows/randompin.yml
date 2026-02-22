@@ -53,13 +53,16 @@ jobs:
       - name: Build with Gradle
         working-directory: ./randompin
         run: |
+          if [ ! -f "keystore.jks" ]; then
+            keytool -genkey -v -keystore keystore.jks -alias randompin -keyalg RSA -keysize 2048 -validity 10000 -storepass "randompin" -keypass "randompin" -dname "CN=RandomPIN, OU=RandomPIN, O=RandomPIN, L=Unknown, S=Unknown, C=UNKNOWN"
+          fi
           gradle wrapper
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease
 
       - name: Rename APK Artifact
         working-directory: ./randompin
         run: |
-          mv app/build/outputs/apk/debug/app-debug.apk randompin-v${{ steps.version.outputs.new_ver }}.apk
+          mv app/build/outputs/apk/release/app-release.apk randompin-v${{ steps.version.outputs.new_ver }}.apk
 
       - name: Create GitHub Release and Upload APK
         uses: softprops/action-gh-release@v2
@@ -70,10 +73,11 @@ jobs:
           prerelease: false
           files: randompin/randompin-v${{ steps.version.outputs.new_ver }}.apk
 
-      - name: Commit and push version bump
+      - name: Commit and push version bump and keystore
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
           git add randompin/app/build.gradle.kts
-          git diff --staged --quiet || git commit -m "chore: bump apk version to ${{ steps.version.outputs.new_ver }}"
+          git add randompin/keystore.jks || true
+          git diff --staged --quiet || git commit -m "chore: bump apk version to ${{ steps.version.outputs.new_ver }} and add keystore"
           git push
