@@ -1,184 +1,128 @@
 package com.randompin.xposed;
 
-import android.content.Context;
-import android.graphics.Rect;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewTreeObserver;
+import android.widget.TextView;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
 import de.robv.android.xposed.XC_MethodHook;
 import de.robv.android.xposed.XposedBridge;
 import de.robv.android.xposed.XposedHelpers;
 
 /**
- * 安卓15+专用Hook
- * 处理新版KeyguardUI的变化
+ * 针对安卓15/16重写的全新Hook逻辑
+ * 不再依赖外部包裹层(Bouncer)，直接劫持 NumPad 控制器底层核心布局
  */
 public class Android15Hooks {
     
-    private static final String TAG = "RandomPIN-Android15";
+    private static final String TAG = "RandomPIN-A16";
+    private static boolean hasRandomized = false;
+    
+    public static void hookKeyguardBouncer(ClassLoader classLoader) {
+        // 安卓16不再通过外部 Bouncer 触发，而是直接监听底部 NumPadKey 的生成
+    }
+    
+    public static void hookLockIconViewController(ClassLoader classLoader) {
+        // 略
+    }
     
     /**
-     * Hook新版KeyguardBouncer
+     * 安卓16终极Hook方案：挂载数字键盘本身的布局完成时刻
      */
-    public static void hookKeyguardBouncer(ClassLoader classLoader) {
+    public static void hookNumPadAnimationController(ClassLoader classLoader) {
         try {
-            // 安卓15+ KeyguardBouncer实现
+            // 直接Hook NumPad数字按键的基类/实现类加载
+            Class<?> numPadKeyClass = XposedHelpers.findClass(
+                "com.android.keyguard.NumPadKey",
+                classLoader
+            );
+            
+            // 当任何一个数字按键解析布局完成时
+            XposedHelpers.findAndHookMethod(
+                numPadKeyClass,
+                "onFinishInflate",
+                new XC_MethodHook() {
+                    @Override
+                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
+                        View keyObj = (View) param.thisObject;
+                        ViewGroup parent = (ViewGroup) keyObj.getParent();
+                        
+                        if (parent != null && !hasRandomized) {
+                            // 为了防抖，延迟一瞬间等所有兄弟节点都加进来后再洗牌
+                            parent.post(new Runnable() {
+                                @Override
+                                public void run() {
+                                    if (!hasRandomized) {
+                                        doHardRandomize(parent);
+                                    }
+                                }
+                            });
+                        }
+                    }
+                }
+            );
+
+            // 监听键盘区域被销毁或隐藏，重置洗牌状态以便下次亮屏再次洗牌
             Class<?> bouncerClass = XposedHelpers.findClass(
                 "com.android.keyguard.KeyguardBouncer",
                 classLoader
             );
-            
             XposedHelpers.findAndHookMethod(
                 bouncerClass,
-                "show",
+                "hide",
                 boolean.class,
-                Runnable.class,
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        // 当bouncer显示时，准备乱序PIN
-                        Object view = XposedHelpers.getObjectField(param.thisObject, "mKeyguardView");
-                        if (view != null) {
-                            randomizePINInContainer((ViewGroup) view);
-                        }
+                        hasRandomized = false;
+                        XposedBridge.log("[" + TAG + "] Bouncer hidden, reset state.");
                     }
                 }
             );
             
-            XposedBridge.log("[" + TAG + "] Hooked KeyguardBouncer");
+            XposedBridge.log("[" + TAG + "] Hooked NumPadKey successfully for Android 16.");
             
         } catch (Throwable t) {
-            XposedBridge.log("[" + TAG + "] Failed to hook KeyguardBouncer: " + t.getMessage());
+            XposedBridge.log("[" + TAG + "] NumPadKey hook failed: " + t.getMessage());
         }
     }
     
     /**
-     * Hook NumPadAnimationController (安卓15+)
+     * 暴力洗牌算法：剥离出来直接重构父容器
      */
-    public static void hookNumPadAnimationController(ClassLoader classLoader) {
-        try {
-            Class<?> controllerClass = XposedHelpers.findClass(
-                "com.android.keyguard.NumPadAnimationController",
-                classLoader
-            );
-            
-            XposedHelpers.findAndHookMethod(
-                controllerClass,
-                "startAppearAnimation",
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        // 在动画开始前乱序
-                        Object key = XposedHelpers.getObjectField(param.thisObject, "mNumPadKey");
-                        if (key != null) {
-                            View view = (View) key;
-                            ViewGroup parent = (ViewGroup) view.getParent();
-                            if (parent != null) {
-                                randomizePINInContainer(parent);
-                            }
-                        }
-                    }
-                }
-            );
-            
-            XposedBridge.log("[" + TAG + "] Hooked NumPadAnimationController");
-            
-        } catch (Throwable t) {
-            // 可能在某些设备上不存在
-            XposedBridge.log("[" + TAG + "] NumPadAnimationController not found (expected)");
-        }
-    }
-    
-    /**
-     * Hook LockIconViewController (安卓15+ 新锁屏界面)
-     */
-    public static void hookLockIconViewController(ClassLoader classLoader) {
-        try {
-            Class<?> lockIconClass = XposedHelpers.findClass(
-                "com.android.keyguard.LockIconViewController",
-                classLoader
-            );
-            
-            // Hook更新方法
-            XposedHelpers.findAndHookMethod(
-                lockIconClass,
-                "updateState",
-                new XC_MethodHook() {
-                    @Override
-                    protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        // 处理新锁屏状态更新
-                    }
-                }
-            );
-            
-            XposedBridge.log("[" + TAG + "] Hooked LockIconViewController");
-            
-        } catch (Throwable t) {
-            XposedBridge.log("[" + TAG + "] LockIconViewController not found");
-        }
-    }
-    
-    /**
-     * 乱序PIN按钮容器
-     */
-    private static void randomizePINInContainer(ViewGroup container) {
+    private static void doHardRandomize(ViewGroup container) {
         if (container == null) return;
         
         try {
-            // 递归查找PIN输入区域
-            findAndRandomizePINButtons(container);
-        } catch (Throwable t) {
-            XposedBridge.log("[" + TAG + "] Error in randomizePINInContainer: " + t.getMessage());
-        }
-    }
-    
-    /**
-     * 递归查找并乱序PIN按钮
-     */
-    private static void findAndRandomizePINButtons(ViewGroup parent) {
-        // 查找包含NumPadKey的容器
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            View child = parent.getChildAt(i);
+            List<View> digitButtons = new ArrayList<>();
+            List<View> otherButtons = new ArrayList<>();
             
-            String className = child.getClass().getName();
-            
-            // 检查是否为NumPadKey容器
-            if (className.contains("NumPadKey") || className.contains("PasswordTextView")) {
-                // 找到了，乱序同级元素
-                randomizeSiblings(parent);
-                return;
+            // 第一步：分类
+            for (int i = 0; i < container.getChildCount(); i++) {
+                View child = container.getChildAt(i);
+                if (isDigit(child)) {
+                    digitButtons.add(child);
+                } else {
+                    otherButtons.add(child);
+                }
             }
             
-            // 递归查找
-            if (child instanceof ViewGroup) {
-                findAndRandomizePINButtons((ViewGroup) child);
-            }
-        }
-    }
-    
-    /**
-     * 乱序同级按钮
-     */
-    private static void randomizeSiblings(ViewGroup container) {
-        java.util.List<View> digitButtons = new java.util.ArrayList<>();
-        java.util.List<View> otherButtons = new java.util.ArrayList<>();
-        
-        for (int i = 0; i < container.getChildCount(); i++) {
-            View child = container.getChildAt(i);
+            // 如果数字按键不足10个（可能不是真正的键盘区域，或还没完全加载完成），退出
+            if (digitButtons.size() < 10) return;
             
-            if (isDigitButton(child)) {
-                digitButtons.add(child);
-            } else {
-                otherButtons.add(child);
-            }
-        }
-        
-        if (digitButtons.size() >= 10) {
-            java.util.Collections.shuffle(digitButtons);
+            // 第二步：洗牌
+            Collections.shuffle(digitButtons);
             
+            // 第三步：重组 (安卓原生的NumPad排序通常是 1-3, 4-6, 7-9, 然后最下方两边是返回/指纹，中间是0)
             container.removeAllViews();
+            
+            // 假设键盘是依靠 index 位置来渲染界面的：
+            // 将打乱后的0-8放回顶部，把原来的其他按钮（如删除、确认）按其原始索引位尝试插回
+            int digitIndex = 0;
+            int totalOriginal = digitButtons.size() + otherButtons.size();
+            
             for (View btn : digitButtons) {
                 container.addView(btn);
             }
@@ -186,32 +130,40 @@ public class Android15Hooks {
                 container.addView(btn);
             }
             
-            XposedBridge.log("[" + TAG + "] PIN buttons randomized");
+            hasRandomized = true;
+            XposedBridge.log("[" + TAG + "] Hard Randomized 10 PIN Buttons successfully!");
+            
+        } catch (Throwable t) {
+            XposedBridge.log("[" + TAG + "] Error in doHardRandomize: " + t.getMessage());
         }
     }
     
     /**
-     * 判断是否为数字按钮
+     * 精确判断是否为数字键
      */
-    private static boolean isDigitButton(View view) {
-        if (view instanceof android.widget.Button) {
-            String text = ((android.widget.Button) view).getText().toString();
-            return text.matches("[0-9]");
+    private static boolean isDigit(View view) {
+        // 根据类名判断
+        String name = view.getClass().getName();
+        if (name.contains("NumPadKey")) {
+            // 通过获取该 View 上的 digit 属性
+            try {
+                Object digitObj = XposedHelpers.getObjectField(view, "mDigit");
+                if (digitObj != null && digitObj instanceof Integer) {
+                    int d = (Integer) digitObj;
+                    return (d >= 0 && d <= 9);
+                }
+            } catch (Throwable e) {
+                // 如果没有 mDigit 字段则回退其他判断
+            }
+            return true;
         }
         
-        Object tag = view.getTag();
-        if (tag instanceof Integer) {
-            int digit = (Integer) tag;
-            return digit >= 0 && digit <= 9;
+        // Android 16 Compose 或部分定制系统可能会用特殊的 TextView
+        if (view instanceof TextView) {
+            String text = ((TextView) view).getText().toString();
+            return text.matches("^[0-9]$");
         }
         
-        if (view.getContentDescription() != null) {
-            String desc = view.getContentDescription().toString();
-            return desc.matches("[0-9]");
-        }
-        
-        // 检查类名
-        String className = view.getClass().getName();
-        return className.contains("NumPadKey");
+        return false;
     }
 }

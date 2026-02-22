@@ -12,9 +12,10 @@ done
 
 sleep 5
 
-# 启动双击锁屏服务
-if [ -f "$MODDIR/common/double_tap_lock.sh" ]; then
-    nohup sh "$MODDIR/common/double_tap_lock.sh" "$MODDIR" > /dev/null 2>&1 &
+# 启动双击锁屏服务 (使用改进版v2)
+if [ -f "$MODDIR/common/double_tap_lock_v2.sh" ]; then
+    chmod +x "$MODDIR/common/double_tap_lock_v2.sh"
+    nohup sh "$MODDIR/common/double_tap_lock_v2.sh" "$MODDIR" > /dev/null 2>&1 &
 fi
 
 # 检查是否安装了LSPosed/Xposed
