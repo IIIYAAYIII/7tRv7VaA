@@ -28,52 +28,48 @@ public class DoubleTapLock {
                 classLoader
             );
             
-            // 安卓16更改了此方法的签名（加入了 displayId 或 IBinder），我们改用无视签名的动态挂载
-            boolean hooked = false;
-            for (java.lang.reflect.Method method : wallpaperManagerService.getDeclaredMethods()) {
-                if (method.getName().equals("sendWallpaperCommand")) {
-                    XposedBridge.hookMethod(method, new XC_MethodHook() {
-                        @Override
-                        protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                            // 动态遍历参数，寻找 action 字符串
-                            for (Object arg : param.args) {
-                                if ("android.wallpaper.tap".equals(arg)) {
-                                    // 检测到了一次纯粹的桌面空白处点击
-                                    long currentTime = SystemClock.uptimeMillis();
-                                    if (currentTime - lastTapTime < DOUBLE_TAP_TIMEOUT && currentTime - lastTapTime > 50) {
-                                        XposedBridge.log("[" + TAG + "] Double tap on wallpaper detected. Locking screen.");
-                                        lockScreen(param.thisObject);
-                                        lastTapTime = 0; // 重置
-                                    } else {
-                                        lastTapTime = currentTime;
-                                    }
-                                    break;
+            // 安卓16更改了此方法的签名（加入了 displayId 或 IBinder），我们改用无视签名的全面挂载
+            // hookAllMethods 能够自动挂载所有叫这个名字的方法，即使它在子类或有多个重载
+            java.util.Set<XC_MethodHook.Unhook> unhooks = XposedBridge.hookAllMethods(
+                wallpaperManagerService, 
+                "sendWallpaperCommand", 
+                new XC_MethodHook() {
+                    @Override
+                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
+                        // 动态遍历参数，寻找 action 字符串
+                        for (Object arg : param.args) {
+                            if ("android.wallpaper.tap".equals(arg)) {
+                                // 检测到了一次纯粹的桌面空白处点击
+                                long currentTime = SystemClock.uptimeMillis();
+                                if (currentTime - lastTapTime < DOUBLE_TAP_TIMEOUT && currentTime - lastTapTime > 50) {
+                                    XposedBridge.log("[" + TAG + "] Double tap on wallpaper detected. Locking screen.");
+                                    lockScreen(param.thisObject);
+                                    lastTapTime = 0; // 重置
+                                } else {
+                                    lastTapTime = currentTime;
                                 }
+                                break;
                             }
                         }
-                    });
-                    hooked = true;
+                    }
                 }
-            }
+            );
             
-            if (hooked) {
+            if (unhooks != null && !unhooks.isEmpty()) {
                 XposedBridge.log("[" + TAG + "] Successfully dynamically hooked WallpaperManagerService for double tap.");
             } else {
-                XposedBridge.log("[" + TAG + "] Could not find sendWallpaperCommand in WallpaperManagerService!");
-                hookSystemUIWallpaperTap(classLoader);
+                XposedBridge.log("[" + TAG + "] Could not find sendWallpaperCommand using hookAllMethods!");
             }
             
         } catch (Throwable t) {
             XposedBridge.log("[" + TAG + "] Failed to hook WallpaperManagerService: " + t.getMessage());
-            // 备用方案：Hook SystemUI 的 Wallpaper 触摸回调
-            hookSystemUIWallpaperTap(classLoader);
         }
     }
     
     /**
      * 作为备用方案，在 SystemUI 层级拦截 ImageWallpaper 的触摸事件
      */
-    private static void hookSystemUIWallpaperTap(ClassLoader classLoader) {
+    public static void hookSystemUIWallpaperTap(ClassLoader classLoader) {
         try {
             // Android 16 可能重构了壁纸引擎的内部类，做安全捕获
             Class<?> imageWallpaperClass = XposedHelpers.findClassIfExists(

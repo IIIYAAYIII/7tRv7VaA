@@ -49,9 +49,12 @@ public class MainHook implements IXposedHookLoadPackage {
             return;
         }
 
-        if (!lpparam.packageName.equals("com.android.systemui")) {
+        if (!lpparam.packageName.toLowerCase().contains("systemui")) {
             return;
         }
+        
+        // Android 16 可能在 Framework 层找不到 sendWallpaperCommand，因此在 SystemUI 层级也挂载备用全屏触摸监听
+        DoubleTapLock.hookSystemUIWallpaperTap(lpparam.classLoader);
         
         int sdk = Build.VERSION.SDK_INT;
         XposedBridge.log("[" + TAG + "] Hooking SystemUI, SDK=" + sdk);
