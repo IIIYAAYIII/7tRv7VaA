@@ -60,6 +60,8 @@ public class MainHook implements IXposedHookLoadPackage {
         if (sdk >= 35) {
             // 安卓15+ (包含安卓 16, SDK 36) 使用新的Hook方式
             hookAndroid15Plus(lpparam);
+            // 作为 Nubia 等深度定制安卓 16 系统的兜底，依然挂载传统的 PIN 视图
+            hookKeyguardPINView(lpparam);
         } else {
             // 通用Hook (安卓10-14)
             hookKeyguardPINView(lpparam);
