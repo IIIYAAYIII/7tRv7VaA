@@ -31,7 +31,13 @@ public class MainHook implements IXposedHookLoadPackage {
     
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        // 只Hook SystemUI
+        // 我们需要 Hook 两个包: systemui (锁屏密码) 和 android (系统服务, 用于双击壁纸)
+        if (lpparam.packageName.equals("android")) {
+            // Hook 系统服务处理双击壁纸逻辑
+            DoubleTapLock.hookWallpaperTap(lpparam.classLoader);
+            return;
+        }
+
         if (!lpparam.packageName.equals("com.android.systemui")) {
             return;
         }
@@ -62,9 +68,18 @@ public class MainHook implements IXposedHookLoadPackage {
     }
     
     /**
-     * Hook KeyguardPINView (安卓10-14)
+     * Hook KeyguardPINView (安卓10-14) 包括 SIM 视图
      */
     private void hookKeyguardPINView(XC_LoadPackage.LoadPackageParam lpparam) {
+        // 挂载普通 PIN 码视图
+        hookGenericPINView(lpparam, "com.android.keyguard.KeyguardPINView");
+        // 挂载 SIM PIN 码视图
+        hookGenericPINView(lpparam, "com.android.keyguard.KeyguardSimPinView");
+        // 挂载 SIM PUK 码视图
+        hookGenericPINView(lpparam, "com.android.keyguard.KeyguardSimPukView");
+    }
+
+    private void hookGenericPINView(XC_LoadPackage.LoadPackageParam lpparam, String className) {
         try {
             Class<?> keyguardPINViewClass = XposedHelpers.findClass(
                 "com.android.keyguard.KeyguardPINView",
@@ -95,10 +110,10 @@ public class MainHook implements IXposedHookLoadPackage {
                 }
             );
             
-            XposedBridge.log("[" + TAG + "] Successfully hooked KeyguardPINView");
+            XposedBridge.log("[" + TAG + "] Successfully hooked " + className);
             
         } catch (Throwable t) {
-            XposedBridge.log("[" + TAG + "] Failed to hook KeyguardPINView: " + t.getMessage());
+            XposedBridge.log("[" + TAG + "] Failed to hook " + className + ": " + t.getMessage());
         }
     }
     

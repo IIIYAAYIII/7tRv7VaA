@@ -33,7 +33,7 @@ public class Android15Hooks {
      */
     public static void hookNumPadAnimationController(ClassLoader classLoader) {
         try {
-            // 直接Hook NumPad数字按键的基类/实现类加载
+            // 挂按键本身的形成时机，适用于锁屏密码、SIM 卡密码和 PUK 解锁区域的共用底层按键
             Class<?> numPadKeyClass = XposedHelpers.findClass(
                 "com.android.keyguard.NumPadKey",
                 classLoader
