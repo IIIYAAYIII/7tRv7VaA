@@ -1,0 +1,37 @@
+#!/sbin/sh
+
+#################
+# Initialization
+#################
+
+umask 022
+
+# Global vars
+TMPDIR=/dev/tmp
+PERSISTDIR=/sbin/.magisk/mirror/persist
+
+rm -rf $TMPDIR 2>/dev/null
+mkdir -p $TMPDIR
+
+# echo before loading util_functions
+ui_print() { echo "$1"; }
+
+##############
+# Environment
+##############
+
+OUTFD=$2
+ZIPFILE=$3
+
+mount /data 2>/dev/null
+
+# Load utility functions
+[ -f /data/adb/magisk/util_functions.sh ] && . /data/adb/magisk/util_functions.sh
+
+# Pre installation
+[ -f $TMPDIR/common/util_functions.sh ] && . $TMPDIR/common/util_functions.sh
+
+# Install the module
+install_module
+
+exit 0

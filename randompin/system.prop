@@ -1,0 +1,17 @@
+# RandomPIN系统属性配置
+# 这些属性会在模块加载时被Magisk设置
+
+# 模块启用状态
+persist.randompin.enabled=1
+
+# PIN乱序功能状态 (需要Xposed/LSPosed)
+persist.randompin.randomize=1
+
+# 双击锁屏功能状态
+persist.randompin.doubletap=1
+
+# 双击间隔超时(毫秒)
+persist.randompin.timeout=400
+
+# Xposed框架检测状态 (系统自动设置)
+# persist.randompin.xposed=
