@@ -1,5 +1,7 @@
 package de.robv.android.xposed;
 
+import java.lang.reflect.Member;
+
 /**
  * 方法Hook回调类
  */
