@@ -41,14 +41,14 @@ public class MainHook implements IXposedHookLoadPackage {
         
         // 根据安卓版本选择不同的Hook方式
         if (sdk >= 35) {
-            // 安卓15+ 使用新的Hook方式
+            // 安卓15+ (包含安卓 16, SDK 36) 使用新的Hook方式
             hookAndroid15Plus(lpparam);
+        } else {
+            // 通用Hook (安卓10-14)
+            hookKeyguardPINView(lpparam);
+            hookLockPatternView(lpparam);
+            hookNumPadKey(lpparam);
         }
-        
-        // 通用Hook (安卓10-14)
-        hookKeyguardPINView(lpparam);
-        hookLockPatternView(lpparam);
-        hookNumPadKey(lpparam);
     }
     
     /**
