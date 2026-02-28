@@ -22,13 +22,13 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
-      # 使用 setup-gradle 并直接指定版本，无需项目内 wrapper JAR
+      # 直接指定 Gradle 版本，无需项目内 wrapper JAR 二进制文件
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      # versionCode = YYYYMMDD00（当日序号后两位），单调递增
+      # versionCode = YYYYMMDD00（日期8位 + 序号2位），保证单调递增
       - name: Calculate versionCode
         id: version
         run: |
@@ -38,9 +38,6 @@ jobs:
           echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
           echo "Build: versionCode=$VERSION_CODE  versionName=$VERSION_NAME"
 
-      - name: Make gradlew executable
-        run: chmod +x blocknum/gradlew || true
-
       - name: Build Debug APK
         working-directory: blocknum
         run: |
@@ -48,7 +45,7 @@ jobs:
             -PversionCode=${{ steps.version.outputs.version_code }} \
             -PversionName=${{ steps.version.outputs.version_name }}
 
-      - name: Collect APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: BlockNum-debug-${{ steps.version.outputs.version_code }}-v${{ steps.version.outputs.version_name }}
