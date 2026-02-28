@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!--
+        READ/WRITE_BLOCKED_NUMBERS：Android 7+，访问系统拦截号码列表。
+        仅限默认拨号器或系统应用自动获得；普通 App 会收到 SecurityException，
+        届时回退到 Root 模式。
+    -->
+    <uses-permission android:name="android.permission.READ_BLOCKED_NUMBERS" />
+    <uses-permission android:name="android.permission.WRITE_BLOCKED_NUMBERS" />
+
+    <!--
+        CALL_PHONE：成为默认拨号器时需要提供此声明，
+        否则部分 Android 版本不允许将 App 设置为默认拨号器。
+    -->
+    <uses-permission android:name="android.permission.CALL_PHONE" />
+
+    <!--
+        Android 8-9 (API 26-28) 本地存储权限（SAF 不需要，Root 复制文件时备用）
+    -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
+
+    <application
+        android:allowBackup="false"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.BlockNum"
+        tools:targetApi="35">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!--
+                tel: scheme 声明：让系统允许将本 App 候选为"默认拨号器"。
+                成为默认拨号器后，BlockedNumberContract 权限检查自动通过。
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tel" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.DIAL" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+    </application>
+</manifest>

@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+    id 'org.jetbrains.kotlin.android'
+}
+
+android {
+    namespace 'com.blocknum.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.blocknum.app"
+        minSdk 26        // Android 8.0 Oreo
+        targetSdk 35     // Android 15
+
+        // versionCode 由 CI 通过 -P 参数注入，默认值供本地调试用
+        versionCode project.hasProperty('versionCode') ? project.property('versionCode').toInteger() : 1
+        versionName project.hasProperty('versionName') ? project.property('versionName') : "1.0.0"
+
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    buildFeatures {
+        viewBinding true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = '17'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ""
+            versionNameSuffix "-debug"
+            debuggable true
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    // 纯 Kotlin 应用，无 JNI/NDK 代码
+    // ARM32 (armeabi-v7a) 和 ARM64 (arm64-v8a) 均由同一 APK 覆盖
+    // 无需 ABI 分包，通用 APK 天然支持两种架构
+}
+
+dependencies {
+    implementation 'androidx.core:core-ktx:1.15.0'
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation 'androidx.constraintlayout:constraintlayout:2.2.0'
+    // 协程：用于 IO/Main 线程切换
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+}

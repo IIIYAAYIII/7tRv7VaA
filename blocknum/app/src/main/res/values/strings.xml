@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BlockNum</string>
+
+    <!-- Access mode -->
+    <string name="mode_standard">✓ Standard API (Default Dialer)</string>
+    <string name="mode_root">⚡ Root Mode</string>
+    <string name="mode_unavailable">✗ Access Unavailable</string>
+
+    <!-- Main screen -->
+    <string name="blocked_count">Blocked numbers: %1$d</string>
+    <string name="count_unavailable">Count unavailable</string>
+    <string name="btn_export">Export Blacklist</string>
+    <string name="btn_import">Import Blacklist</string>
+    <string name="btn_refresh">Refresh</string>
+    <string name="btn_set_default_dialer">Set as Default Dialer</string>
+    <string name="card_default_dialer_hint">Grant access via Default Dialer or Root</string>
+    <string name="access_mode_label">Access Mode:</string>
+    <string name="android_version_label">Android Version:</string>
+    <string name="log_title">Operation Log</string>
+    <string name="log_empty">No operations yet.</string>
+
+    <!-- Import dialog -->
+    <string name="import_mode_title">Import Mode</string>
+    <string name="import_mode_message">How to import the numbers?</string>
+    <string name="import_merge">Merge (keep existing)</string>
+    <string name="import_replace">Replace (clear all first)</string>
+    <string name="confirm_replace_title">Confirm Replace</string>
+    <string name="confirm_replace_message">This will DELETE all existing blocked numbers and replace with the file contents. Are you sure?</string>
+    <string name="confirm">Confirm</string>
+    <string name="cancel">Cancel</string>
+
+    <!-- Results -->
+    <string name="export_success">Exported %1$d numbers successfully.</string>
+    <string name="export_error">Export failed: %1$s</string>
+    <string name="import_success">Import done: +%1$d added, %2$d skipped (duplicate), %3$d failed.</string>
+    <string name="import_error">Import failed: %1$s</string>
+    <string name="error_default_dialer">Failed to open default dialer settings.</string>
+    <string name="no_numbers_to_export">No blocked numbers to export.</string>
+</resources>

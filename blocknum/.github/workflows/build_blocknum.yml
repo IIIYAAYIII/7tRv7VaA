@@ -1,0 +1,56 @@
+name: Build BlockNum APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Version name (e.g. 1.0.0)'
+        required: false
+        default: '1.0.0'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      # 使用 setup-gradle 并直接指定版本，无需项目内 wrapper JAR
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      # versionCode = YYYYMMDD00（当日序号后两位），单调递增
+      - name: Calculate versionCode
+        id: version
+        run: |
+          VERSION_CODE=$(date -u +%Y%m%d)00
+          VERSION_NAME="${{ github.event.inputs.version_name }}"
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "version_name=$VERSION_NAME" >> $GITHUB_OUTPUT
+          echo "Build: versionCode=$VERSION_CODE  versionName=$VERSION_NAME"
+
+      - name: Make gradlew executable
+        run: chmod +x blocknum/gradlew || true
+
+      - name: Build Debug APK
+        working-directory: blocknum
+        run: |
+          gradle assembleDebug \
+            -PversionCode=${{ steps.version.outputs.version_code }} \
+            -PversionName=${{ steps.version.outputs.version_name }}
+
+      - name: Collect APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlockNum-debug-${{ steps.version.outputs.version_code }}-v${{ steps.version.outputs.version_name }}
+          path: blocknum/app/build/outputs/apk/debug/*.apk
+          retention-days: 30

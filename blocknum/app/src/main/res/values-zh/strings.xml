@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BlockNum</string>
+
+    <!-- 访问模式 -->
+    <string name="mode_standard">✓ 标准接口（默认拨号器）</string>
+    <string name="mode_root">⚡ Root 模式</string>
+    <string name="mode_unavailable">✗ 无法访问</string>
+
+    <!-- 主界面 -->
+    <string name="blocked_count">已屏蔽号码：%1$d 条</string>
+    <string name="count_unavailable">无法获取数量</string>
+    <string name="btn_export">导出黑名单</string>
+    <string name="btn_import">导入黑名单</string>
+    <string name="btn_refresh">刷新</string>
+    <string name="btn_set_default_dialer">设为默认拨号器</string>
+    <string name="card_default_dialer_hint">通过设为默认拨号器或 Root 授权来获取权限</string>
+    <string name="access_mode_label">访问方式：</string>
+    <string name="android_version_label">Android 版本：</string>
+    <string name="log_title">操作日志</string>
+    <string name="log_empty">暂无操作记录。</string>
+
+    <!-- 导入对话框 -->
+    <string name="import_mode_title">导入方式</string>
+    <string name="import_mode_message">请选择导入方式</string>
+    <string name="import_merge">合并（保留现有）</string>
+    <string name="import_replace">替换（先清空再导入）</string>
+    <string name="confirm_replace_title">确认替换</string>
+    <string name="confirm_replace_message">此操作将删除所有现有屏蔽号码，然后从文件导入。确认继续？</string>
+    <string name="confirm">确认</string>
+    <string name="cancel">取消</string>
+
+    <!-- 结果信息 -->
+    <string name="export_success">已成功导出 %1$d 条号码。</string>
+    <string name="export_error">导出失败：%1$s</string>
+    <string name="import_success">导入完成：新增 %1$d 条，跳过重复 %2$d 条，失败 %3$d 条。</string>
+    <string name="import_error">导入失败：%1$s</string>
+    <string name="error_default_dialer">无法打开默认拨号器设置界面。</string>
+    <string name="no_numbers_to_export">当前无屏蔽号码可导出。</string>
+</resources>

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 主色调 -->
+    <color name="primary">#1A237E</color>
+    <color name="primary_variant">#283593</color>
+    <color name="on_primary">#FFFFFF</color>
+    <color name="secondary">#E53935</color>
+    <color name="on_secondary">#FFFFFF</color>
+    <color name="background">#F5F5F5</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="on_surface">#212121</color>
+    <color name="on_surface_secondary">#757575</color>
+
+    <!-- 状态色 -->
+    <color name="success">#2E7D32</color>
+    <color name="warning">#F57C00</color>
+    <color name="error">#C62828</color>
+
+    <!-- 图标背景（Adaptive Icon） -->
+    <color name="ic_launcher_background">#1A237E</color>
+</resources>
