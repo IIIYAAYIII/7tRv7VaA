@@ -26,7 +26,10 @@ object RootHelper {
      * 不同厂商/AOSP 版本可能使用不同目录
      */
     val KNOWN_DB_PATHS = listOf(
-        // 高版本 Android (14/15/16) 的专用系统库
+        // 高版本 Android (14/15/16) 的专用系统库（BlockedNumberProvider）
+        "/data/user_de/0/com.android.providers.blockednumber/databases/blockednumbers.db",
+        "/data/data/com.android.providers.blockednumber/databases/blockednumbers.db",
+        // 高版本 Android 备选
         "/data/user_de/0/com.android.providers.telephony/databases/bdata.db",
         "/data/data/com.android.providers.telephony/databases/bdata.db",
         // 传统/旧版本的库
@@ -38,7 +41,9 @@ object RootHelper {
 
     /** 根据数据库的文件名判断应该使用哪个表名 */
     private fun getTableName(dbPath: String): String {
-        return if (dbPath.endsWith("bdata.db")) "blocked" else "blocked_numbers"
+        return if (dbPath.endsWith("bdata.db")) "blocked"
+               else if (dbPath.endsWith("blockednumbers.db")) "blocked"
+               else "blocked_numbers"
     }
 
     // ── 公开 API ────────────────────────────────────────────────
@@ -70,8 +75,9 @@ object RootHelper {
     fun findBlockedNumbersDbPath(): String? {
         for (path in KNOWN_DB_PATHS) {
             try {
-                // 使用 cat 探测以绕过部分 Android 14+ 系统的 ls 权限限制
-                val result = execAsRoot("cat \"$path\" > /dev/null 2>&1 && echo EXISTS")
+                // 使用 Root 权限下的 stat 或 ls 工具判断文件是否存在（比 cat /dev/null 更通用）
+                // 部分精简系统没有 stat，使用 ls 即可。如果存在则会输出文件名
+                val result = execAsRoot("if [ -f \"$path\" ]; then echo EXISTS; fi")
                 if (result.contains("EXISTS")) {
                     logger?.invoke("Found DB at: $path")
                     return path
