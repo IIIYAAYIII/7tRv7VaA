@@ -88,6 +88,13 @@ class MainActivity : AppCompatActivity() {
         setupActionButtons()
         setupLogCopyFeature()
 
+        // 为 RootHelper 挂载此 UI 日志回调，这样底层的库查找、失败等信息就能打印到屏幕
+        RootHelper.logger = { msg ->
+            lifecycleScope.launch(Dispatchers.Main) {
+                appendLog(msg)
+            }
+        }
+
         // 显示 Android 版本信息（Android 版本检测）
         showAndroidVersionInfo()
 
@@ -172,9 +179,11 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             currentMode = manager.detectAccessMode()
             val count = runCatching { manager.getCount(currentMode) }.getOrDefault(-1)
+            
             withContext(Dispatchers.Main) {
                 updateModeUI(currentMode, count)
                 setLoadingState(false)
+                appendLog("Mode detected: $currentMode, Count: $count")
             }
         }
     }
@@ -199,9 +208,9 @@ class MainActivity : AppCompatActivity() {
         val hasAccess = mode != BlockedNumbersManager.AccessMode.UNAVAILABLE
         binding.btnExport.isEnabled = hasAccess
         binding.btnImport.isEnabled = hasAccess
-        // 无权限时显示「设为默认拨号器」引导卡片
+        // 只要不是 STANDARD_API，就始终显示「设为默认拨号器」引导卡片（推荐官方做法）
         binding.cardDefaultDialer.visibility =
-            if (mode == BlockedNumbersManager.AccessMode.UNAVAILABLE) View.VISIBLE else View.GONE
+            if (mode != BlockedNumbersManager.AccessMode.STANDARD_API) View.VISIBLE else View.GONE
     }
 
     // ── 默认拨号器引导 ───────────────────────────────────────────
@@ -312,6 +321,10 @@ class MainActivity : AppCompatActivity() {
             binding.btnExport.isEnabled = false
             binding.btnImport.isEnabled = false
         }
+    }
+
+    fun appendLogPublic(message: String) {
+        appendLog(message)
     }
 
     private fun appendLog(message: String) {

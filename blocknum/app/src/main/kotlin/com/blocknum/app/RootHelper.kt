@@ -17,6 +17,9 @@ object RootHelper {
 
     private const val TAG = "RootHelper"
     private const val TIMEOUT_MS = 8000L
+    
+    // 全局日志回调，用于将底层错误输出到 UI
+    var logger: ((String) -> Unit)? = null
 
     /**
      * 已知的 blocked_numbers.db 路径列表（按优先级）
@@ -42,17 +45,11 @@ object RootHelper {
 
     /**
      * 检测设备是否具有 Root 权限。
-     * 先确认 su 二进制存在，再实际执行一条命令验证授权。
+     * 为了避免在 App 启动时就立刻弹出烦人的 su 授权弹窗，这里仅执行静态的二进制文件检查。
+     * 真正的授权弹窗会在后续第一次实际执行 Root 挂载时触发。
      */
     fun isRootAvailable(): Boolean {
-        if (!isSuBinaryPresent()) return false
-        return try {
-            val result = execAsRoot("id")
-            result.contains("uid=0")
-        } catch (e: Exception) {
-            Log.w(TAG, "Root check failed: ${e.message}")
-            false
-        }
+        return isSuBinaryPresent()
     }
 
     /**
@@ -73,12 +70,17 @@ object RootHelper {
     fun findBlockedNumbersDbPath(): String? {
         for (path in KNOWN_DB_PATHS) {
             try {
-                val result = execAsRoot("ls \"$path\" 2>/dev/null && echo EXISTS")
-                if (result.contains("EXISTS")) return path
+                // 使用 cat 探测以绕过部分 Android 14+ 系统的 ls 权限限制
+                val result = execAsRoot("cat \"$path\" > /dev/null 2>&1 && echo EXISTS")
+                if (result.contains("EXISTS")) {
+                    logger?.invoke("Found DB at: $path")
+                    return path
+                }
             } catch (e: Exception) {
                 continue
             }
         }
+        logger?.invoke("Blocked numbers DB not found in known paths.")
         return null
     }
 
@@ -131,10 +133,19 @@ object RootHelper {
     fun copyDbToCache(dbPath: String, cacheDir: File): File? {
         val dest = File(cacheDir, "blocked_numbers_copy.db")
         return try {
-            execAsRoot("cp \"$dbPath\" \"${dest.absolutePath}\" && chmod 644 \"${dest.absolutePath}\"")
-            if (dest.exists() && dest.length() > 0) dest else null
+            // Android 14+ SELinux 会拦截普通的 cp，使用 cat 绕过
+            execAsRoot("cat \"$dbPath\" > \"${dest.absolutePath}\" && chmod 644 \"${dest.absolutePath}\"")
+            if (dest.exists() && dest.length() > 0) {
+                logger?.invoke("Successfully copied DB to cache using cat.")
+                dest
+            } else {
+                logger?.invoke("DB copy to cache is empty or missing.")
+                null
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "copyDbToCache failed: ${e.message}")
+            val msg = "copyDbToCache failed: ${e.message}"
+            Log.e(TAG, msg)
+            logger?.invoke(msg)
             null
         }
     }
@@ -144,14 +155,18 @@ object RootHelper {
      */
     fun copyDbBackToSystem(localDb: File, dbPath: String): Boolean {
         return try {
+            // Android 14+ SELinux，同样使用 cat 回写
             execAsRoot(
-                "cp \"${localDb.absolutePath}\" \"$dbPath\" && " +
+                "cat \"${localDb.absolutePath}\" > \"$dbPath\" && " +
                 "chmod 660 \"$dbPath\" && " +
-                "chown system:system \"$dbPath\""
+                "chown system:system \"$dbPath\" || chown radio:radio \"$dbPath\""
             )
+            logger?.invoke("Successfully copied DB back to system.")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "copyDbBack failed: ${e.message}")
+            val msg = "copyDbBack failed: ${e.message}"
+            Log.e(TAG, msg)
+            logger?.invoke(msg)
             false
         }
     }
@@ -180,8 +195,9 @@ object RootHelper {
         Log.d(TAG, "execAsRoot: exit=$exitCode  stdout='${stdout.take(200)}'  stderr='${stderr.take(200)}'")
 
         if (exitCode != 0 && stderr.isNotBlank()) {
-            val errStr = "Root cmd stderr: $stderr"
+            val errStr = "Root cmd stderr: $stderr (Code: $exitCode, Cmd: $command)"
             Log.w(TAG, errStr)
+            logger?.invoke(errStr)
             throw RuntimeException(errStr)
         }
         return stdout.trim()
