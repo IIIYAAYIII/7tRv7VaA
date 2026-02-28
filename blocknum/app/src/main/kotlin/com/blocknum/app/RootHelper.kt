@@ -187,7 +187,7 @@ object RootHelper {
             try {
                 exitValue() // 不抛异常说明进程已结束
                 return true
-            } catch (_: IllegalThreadStateException) {
+            } catch (e: IllegalThreadStateException) {
                 Thread.sleep(50)
             }
         }

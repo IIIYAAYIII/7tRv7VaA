@@ -3,10 +3,8 @@ package com.blocknum.app
 import android.content.ContentValues
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
-import android.os.Build
 import android.provider.BlockedNumberContract
 import android.util.Log
-import java.io.File
 
 /**
  * 拦截号码核心管理类
