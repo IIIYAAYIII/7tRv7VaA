@@ -1,0 +1,7 @@
+REPO_CONTEXT:
+- MULTI_PROJECT_REPO: Each named subdirectory is an isolated, independent codebase. No cross-dependencies.
+- CI/CD_CONFIG: .github/workflows/ controls GitHub Action builds.
+- AI_RULES:
+  - user_communication: MUST be Chinese (zh-CN).
+  - user_facing_docs: MUST be Chinese (zh-CN).
+  - internal/other_content: Any.

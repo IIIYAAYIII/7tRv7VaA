@@ -8,6 +8,8 @@ import android.os.Build
 import android.view.View
 import android.os.Bundle
 import android.telecom.TelecomManager
+import android.content.ClipboardManager
+import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -84,6 +86,7 @@ class MainActivity : AppCompatActivity() {
         setupToolbar()
         setupLanguageButton()
         setupActionButtons()
+        setupLogCopyFeature()
 
         // 显示 Android 版本信息（Android 版本检测）
         showAndroidVersionInfo()
@@ -115,6 +118,24 @@ class MainActivity : AppCompatActivity() {
         binding.btnImport.setOnClickListener { startImport() }
         binding.btnRefresh.setOnClickListener { detectAndUpdateMode() }
         binding.btnSetDefaultDialer.setOnClickListener { requestBecomeDefaultDialer() }
+    }
+
+    private fun setupLogCopyFeature() {
+        val copyAction = {
+            val logText = binding.tvLog.text.toString()
+            if (logText != getString(R.string.log_empty) && logText.isNotBlank()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = android.content.ClipData.newPlainText("BlockNum Log", logText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnCopyLog.setOnClickListener { copyAction() }
+        binding.tvLog.setOnLongClickListener { 
+            copyAction()
+            true 
+        }
     }
 
     /**

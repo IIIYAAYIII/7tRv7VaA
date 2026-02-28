@@ -206,8 +206,9 @@ class BlockedNumbersManager(private val context: Context) {
             val db = SQLiteDatabase.openDatabase(
                 localDb.absolutePath, null, SQLiteDatabase.OPEN_READONLY
             )
+            val tableName = if (dbPath.endsWith("bdata.db")) "blocked" else "blocked_numbers"
             db.use { database ->
-                database.rawQuery("SELECT original_number FROM blocked_numbers", null)
+                database.rawQuery("SELECT original_number FROM $tableName", null)
                     ?.use { cursor ->
                         while (cursor.moveToNext()) {
                             cursor.getString(0)?.let { numbers.add(it) }
@@ -262,13 +263,14 @@ class BlockedNumbersManager(private val context: Context) {
             val db = SQLiteDatabase.openDatabase(
                 localDb.absolutePath, null, SQLiteDatabase.OPEN_READWRITE
             )
+            val tableName = if (dbPath.endsWith("bdata.db")) "blocked" else "blocked_numbers"
             db.use { database ->
                 if (replace) {
-                    database.execSQL("DELETE FROM blocked_numbers")
+                    database.execSQL("DELETE FROM $tableName")
                 }
                 val existing = if (!replace) {
                     val set = hashSetOf<String>()
-                    database.rawQuery("SELECT original_number FROM blocked_numbers", null)
+                    database.rawQuery("SELECT original_number FROM $tableName", null)
                         ?.use { c -> while (c.moveToNext()) c.getString(0)?.let { set.add(it) } }
                     set
                 } else hashSetOf()
@@ -283,7 +285,7 @@ class BlockedNumbersManager(private val context: Context) {
                             put("e164_number", trimmed)
                         }
                         database.insertWithOnConflict(
-                            "blocked_numbers", null, cv,
+                            tableName, null, cv,
                             SQLiteDatabase.CONFLICT_IGNORE
                         )
                         added++

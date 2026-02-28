@@ -23,11 +23,20 @@ object RootHelper {
      * 不同厂商/AOSP 版本可能使用不同目录
      */
     val KNOWN_DB_PATHS = listOf(
+        // 高版本 Android (14/15/16) 的专用系统库
+        "/data/user_de/0/com.android.providers.telephony/databases/bdata.db",
+        "/data/data/com.android.providers.telephony/databases/bdata.db",
+        // 传统/旧版本的库
         "/data/data/com.android.providers.contacts/databases/blocked_numbers.db",
         "/data/user/0/com.android.providers.contacts/databases/blocked_numbers.db",
         "/data/data/com.google.android.dialer/databases/blocked_numbers.db",
         "/data/user/0/com.google.android.dialer/databases/blocked_numbers.db"
     )
+
+    /** 根据数据库的文件名判断应该使用哪个表名 */
+    private fun getTableName(dbPath: String): String {
+        return if (dbPath.endsWith("bdata.db")) "blocked" else "blocked_numbers"
+    }
 
     // ── 公开 API ────────────────────────────────────────────────
 
@@ -77,7 +86,8 @@ object RootHelper {
      * 通过 sqlite3 读取拦截号码列表（需 sqlite3 可用）
      */
     fun readBlockedNumbersViaSqlite(dbPath: String): List<String> {
-        val result = execAsRoot("sqlite3 \"$dbPath\" 'SELECT original_number FROM blocked_numbers;'")
+        val tableName = getTableName(dbPath)
+        val result = execAsRoot("sqlite3 \"$dbPath\" 'SELECT original_number FROM $tableName;'")
         return result.lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -89,12 +99,13 @@ object RootHelper {
      */
     fun insertBlockedNumbersViaSqlite(dbPath: String, numbers: List<String>): Int {
         var count = 0
+        val tableName = getTableName(dbPath)
         numbers.forEach { number ->
             val sanitized = number.replace("'", "''") // SQL 转义
             try {
                 execAsRoot(
                     "sqlite3 \"$dbPath\" " +
-                    "\"INSERT OR IGNORE INTO blocked_numbers(original_number,e164_number) " +
+                    "\"INSERT OR IGNORE INTO $tableName(original_number,e164_number) " +
                     "VALUES('$sanitized','$sanitized');\""
                 )
                 count++
@@ -109,7 +120,8 @@ object RootHelper {
      * 通过 sqlite3 删除所有拦截号码（清空表）
      */
     fun clearBlockedNumbersViaSqlite(dbPath: String) {
-        execAsRoot("sqlite3 \"$dbPath\" 'DELETE FROM blocked_numbers;'")
+        val tableName = getTableName(dbPath)
+        execAsRoot("sqlite3 \"$dbPath\" 'DELETE FROM $tableName;'")
     }
 
     /**
@@ -168,7 +180,9 @@ object RootHelper {
         Log.d(TAG, "execAsRoot: exit=$exitCode  stdout='${stdout.take(200)}'  stderr='${stderr.take(200)}'")
 
         if (exitCode != 0 && stderr.isNotBlank()) {
-            Log.w(TAG, "Root cmd stderr: $stderr")
+            val errStr = "Root cmd stderr: $stderr"
+            Log.w(TAG, errStr)
+            throw RuntimeException(errStr)
         }
         return stdout.trim()
     }

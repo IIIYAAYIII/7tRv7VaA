@@ -45,9 +45,13 @@ jobs:
             -PversionCode=${{ steps.version.outputs.version_code }} \
             -PversionName=${{ steps.version.outputs.version_name }}
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
         with:
-          name: BlockNum-debug-${{ steps.version.outputs.version_code }}-v${{ steps.version.outputs.version_name }}
-          path: blocknum/app/build/outputs/apk/debug/*.apk
-          retention-days: 30
+          tag_name: v${{ steps.version.outputs.version_name }}-${{ steps.version.outputs.version_code }}
+          name: "BlockNum v${{ steps.version.outputs.version_name }}"
+          draft: false
+          prerelease: false
+          files: blocknum/app/build/outputs/apk/debug/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
