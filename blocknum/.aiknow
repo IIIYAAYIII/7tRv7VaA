@@ -1,0 +1,161 @@
+# BlockNum — 拨号器黑名单导入导出工具
+
+## 程序功能
+
+将安卓设备拨号软件中存储的**屏蔽号码（黑名单）**批量导出为 CSV 文件，或从 CSV 文件批量导入号码到设备黑名单。
+
+### 主要功能
+- **读取**：获取当前设备黑名单中的所有号码及数量
+- **导出**：将黑名单保存为 CSV 文件（每行一个号码，UTF-8 编码）
+- **导入（合并）**：从文件追加号码，已有号码自动跳过（去重）
+- **导入（替换）**：清空现有黑名单后全部从文件导入（操作前二次确认）
+- **语言切换**：界面右上角按钮切换中文 / English（重启 Activity 生效）
+- **版本检测**：主界面显示当前设备的 Android 版本号和 API 级别
+
+---
+
+## 黑名单访问策略（三层回退）
+
+| 优先级 | 方式 | 前提条件 | 技术实现 |
+|------|------|---------|---------|
+| ① 标准 API | BlockedNumberContract | App 已被设置为默认拨号器 | ContentProvider 读写 |
+| ② Root + sqlite3 | Root 命令行 | 设备已 Root 且 ROM 内含 sqlite3 | `su` + `sqlite3` 命令 |
+| ③ Root + DB 复制 | Root 文件操作 | 设备已 Root（sqlite3 不可用时） | 复制 DB 到缓存目录，用 SQLiteDatabase API 读写后写回 |
+
+- 启动时自动检测并显示当前使用的访问方式
+- 若三种方式均不可用，导入/导出按钮保持禁用，并显示「设为默认拨号器」引导卡片
+
+### 设为默认拨号器（标准 API 授权路径）
+主界面无权限时显示提示卡片，点击「设为默认拨号器」调用系统对话框。
+设置成功后返回 App，自动重新检测访问模式。
+**注意**：设为默认拨号器后本 App 会接管来电 UI，用完后建议还原原来的拨号器。
+
+---
+
+## 文件格式（CSV）
+
+```
+# BlockNum export - 3 numbers
++8613812345678
++8613987654321
+10086
+```
+
+- 以 `#` 开头的行为注释，导入时自动跳过
+- 支持导入带 BOM 的 UTF-8 文件（Windows Excel 另存为 CSV 时常见）
+- 导入时取逗号前第一列，兼容标准 CSV 多列格式
+- 导入自动去重（LinkedHashSet 保序）
+
+---
+
+## 数据库路径（Root 模式）
+
+程序按优先级依次尝试以下路径：
+
+1. `/data/data/com.android.providers.contacts/databases/blocked_numbers.db`
+2. `/data/user/0/com.android.providers.contacts/databases/blocked_numbers.db`
+3. `/data/data/com.google.android.dialer/databases/blocked_numbers.db`
+4. `/data/user/0/com.google.android.dialer/databases/blocked_numbers.db`
+
+数据库表结构（AOSP 标准）：
+```sql
+CREATE TABLE blocked_numbers (
+    _id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    original_number TEXT NOT NULL UNIQUE,
+    e164_number  TEXT
+);
+```
+
+---
+
+## Android 版本兼容说明
+
+| API | Android | 注意事项 |
+|-----|---------|---------|
+| 26-27 | 8.0-8.1 | 最低支持版本，所有功能基准 |
+| 28 | 9 | 存储权限正常，SAF 可用 |
+| 29 | 10 | 分区存储开始，`WRITE_EXTERNAL_STORAGE` 不再有效，已改用 SAF |
+| 30 | 11 | 分区存储强制，Manifest 中存储权限限制 maxSdkVersion=28 |
+| 31-32 | 12 | 无额外影响 |
+| 33 | 13 | 新媒体权限，但本程序用 SAF 不受影响 |
+| 34 | 14 | `WRITE_EXTERNAL_STORAGE` 完全废弃，已兼容 |
+| 35 | 15 | targetSdk，正常支持 |
+| 36+ | 16+ | 以 Baklava 识别，代码已覆盖 |
+
+---
+
+## 项目结构
+
+```
+blocknum/
+├── .github/           ← 此目录可删除（Action 文件已移到仓库根）
+├── app/
+│   ├── build.gradle   ← minSdk 26, targetSdk 35
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── kotlin/com/blocknum/app/
+│       │   ├── MainActivity.kt          # 主界面、语言切换、SAF 导入导出
+│       │   ├── BlockedNumbersManager.kt # 核心三层读写逻辑
+│       │   ├── RootHelper.kt            # Root 检测、su 命令执行
+│       │   └── FileUtils.kt             # CSV 导出/导入
+│       └── res/
+│           ├── layout/activity_main.xml
+│           ├── values/strings.xml (EN)
+│           ├── values-zh/strings.xml (ZH)
+│           └── drawable/ ic_launcher_foreground, ic_export, ic_import
+├── build.gradle       ← AGP 8.7.3 + Kotlin 2.0.21
+└── gradle/wrapper/gradle-wrapper.properties  ← Gradle 8.10.2
+```
+
+---
+
+## 版本号机制
+
+| 字段 | 格式 | 示例 | 来源 |
+|------|------|------|------|
+| versionName | major.minor.patch | 1.0.0 | 触发编译时手动填写 |
+| versionCode | YYYYMMDD00 | 2026022800 | CI 脚本自动生成，保证单调递增 |
+
+---
+
+## GitHub Actions 编译
+
+Action 文件位于仓库根目录：**`.github/workflows/build_blocknum.yml`**
+
+触发方式：**手动触发（workflow_dispatch）**
+
+步骤：
+1. 在 GitHub → Actions → Build BlockNum APK → Run workflow
+2. 填写 version_name（默认 1.0.0）→ Run
+3. 完成后在 Artifacts 区下载 APK（保留 30 天）
+
+使用 Debug 签名，无需配置任何 Secrets。
+
+---
+
+## 依赖版本（截至 2026-02）
+
+| 依赖 | 版本 |
+|------|------|
+| Android Gradle Plugin | 8.7.3 |
+| Kotlin | 2.0.21 |
+| Gradle Wrapper | 8.10.2 |
+| compileSdk / targetSdk | 35 (Android 15) |
+| minSdk | 26 (Android 8) |
+| androidx.core:core-ktx | 1.15.0 |
+| androidx.appcompat | 1.7.0 |
+| material | 1.12.0 |
+| constraintlayout | 2.2.0 |
+| kotlinx-coroutines-android | 1.8.1 |
+| lifecycle-runtime-ktx | 2.8.7 |
+
+---
+
+## 注意事项
+
+1. **默认拨号器副作用**：设为默认拨号器后本 App 会接管来电显示，测试完建议在系统设置中还原。
+2. **Root 模式风险**：直接操作系统数据库，操作前建议先导出备份。DB 写回后需要系统拨号器进程重新加载才生效（重启设备或 force stop 拨号器）。
+3. **BlockNum 不含拨号功能**：Manifest 中声明了 `tel:` scheme 仅为申请成为默认拨号器候选，App 本身没有实现拨号界面。
+4. **多用户设备**：`BlockedNumberContract.canCurrentUserBlockNumbers()` 在非主账户下返回 false，黑名单操作受限，Root 模式同样可能无效（数据存在主用户目录）。
+5. **厂商定制 ROM**：部分厂商（如 MIUI/HyperOS、ColorOS）可能使用私有黑名单实现，不在 AOSP 标准路径，Root 模式可能找不到 DB 文件。
+6. **sqlite3 不一定存在**：Android 10 以后部分精简 ROM 删除了 sqlite3，此时自动切换为 DB 文件复制方案。
