@@ -31,15 +31,15 @@
         <!-- 语言切换按钮（右上角） -->
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btn_language"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:layout_marginEnd="4dp"
+            android:layout_marginEnd="8dp"
             android:text="EN"
             android:textColor="@color/on_primary"
-            app:strokeColor="@color/on_primary"
-            app:layout_constraintTop_toBottomOf="@id/toolbar"
+            android:elevation="6dp"
+            app:layout_constraintTop_toTopOf="@id/toolbar"
+            app:layout_constraintBottom_toBottomOf="@id/toolbar"
             app:layout_constraintEnd_toEndOf="parent" />
 
         <!-- 设备信息卡片 -->
@@ -50,7 +50,7 @@
             android:layout_marginTop="8dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="2dp"
-            app:layout_constraintTop_toBottomOf="@id/btn_language"
+            app:layout_constraintTop_toBottomOf="@id/toolbar"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent">
 
@@ -207,18 +207,43 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent" />
 
-        <!-- 日志标题 -->
-        <TextView
-            android:id="@+id/tv_log_title"
-            android:layout_width="wrap_content"
+        <!-- 日志标题和复制按钮 -->
+        <LinearLayout
+            android:id="@+id/ll_log_title"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="@string/log_title"
-            android:textStyle="bold"
-            android:textColor="@color/on_surface"
-            android:textSize="14sp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
             app:layout_constraintTop_toBottomOf="@id/progress_bar"
-            app:layout_constraintStart_toStartOf="parent" />
+            app:layout_constraintStart_toStartOf="parent">
+
+            <TextView
+                android:id="@+id/tv_log_title"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/log_title"
+                android:textStyle="bold"
+                android:textColor="@color/on_surface"
+                android:textSize="14sp" />
+
+            <!-- Spacer -->
+            <View
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+
+            <!-- 复制日志按钮 -->
+            <ImageButton
+                android:id="@+id/btn_copy_log"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@drawable/ic_copy"
+                android:contentDescription="Copy Log"
+                android:tooltipText="Copy Log"
+                app:tint="@color/primary" />
+        </LinearLayout>
 
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/card_log"
@@ -228,7 +253,7 @@
             android:layout_marginBottom="16dp"
             app:cardCornerRadius="8dp"
             app:cardElevation="1dp"
-            app:layout_constraintTop_toBottomOf="@id/tv_log_title"
+            app:layout_constraintTop_toBottomOf="@id/ll_log_title"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintBottom_toBottomOf="parent">

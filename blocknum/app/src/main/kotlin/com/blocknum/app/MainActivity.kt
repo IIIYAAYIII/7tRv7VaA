@@ -8,6 +8,9 @@ import android.os.Build
 import android.view.View
 import android.os.Bundle
 import android.telecom.TelecomManager
+import android.content.ClipboardManager
+import android.widget.Toast
+import android.app.role.RoleManager
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
@@ -84,12 +87,20 @@ class MainActivity : AppCompatActivity() {
         setupToolbar()
         setupLanguageButton()
         setupActionButtons()
+        setupLogCopyFeature()
+
+        // 为 RootHelper 挂载此 UI 日志回调，这样底层的库查找、失败等信息就能打印到屏幕
+        RootHelper.logger = { msg ->
+            lifecycleScope.launch(Dispatchers.Main) {
+                appendLog(msg)
+            }
+        }
 
         // 显示 Android 版本信息（Android 版本检测）
         showAndroidVersionInfo()
 
-        // 启动时自动检测访问模式
-        detectAndUpdateMode()
+        // 启动时自动检测访问模式，不强制去读取 ROOT 数据以避免启动瞬间出现 SU 弹窗
+        detectAndUpdateMode(forceRootCheck = false)
     }
 
     // ── UI 初始化 ────────────────────────────────────────────────
@@ -113,8 +124,26 @@ class MainActivity : AppCompatActivity() {
     private fun setupActionButtons() {
         binding.btnExport.setOnClickListener { startExport() }
         binding.btnImport.setOnClickListener { startImport() }
-        binding.btnRefresh.setOnClickListener { detectAndUpdateMode() }
+        binding.btnRefresh.setOnClickListener { detectAndUpdateMode(forceRootCheck = true) }
         binding.btnSetDefaultDialer.setOnClickListener { requestBecomeDefaultDialer() }
+    }
+
+    private fun setupLogCopyFeature() {
+        val copyAction = {
+            val logText = binding.tvLog.text.toString()
+            if (logText != getString(R.string.log_empty) && logText.isNotBlank()) {
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                val clip = android.content.ClipData.newPlainText("BlockNum Log", logText)
+                clipboard.setPrimaryClip(clip)
+                Toast.makeText(this, "Log copied", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        binding.btnCopyLog.setOnClickListener { copyAction() }
+        binding.tvLog.setOnLongClickListener { 
+            copyAction()
+            true 
+        }
     }
 
     /**
@@ -146,14 +175,23 @@ class MainActivity : AppCompatActivity() {
 
     // ── 访问模式检测 ────────────────────────────────────────────
 
-    private fun detectAndUpdateMode() {
+    private fun detectAndUpdateMode(forceRootCheck: Boolean = false) {
         setLoadingState(true)
         lifecycleScope.launch(Dispatchers.IO) {
             currentMode = manager.detectAccessMode()
-            val count = runCatching { manager.getCount(currentMode) }.getOrDefault(-1)
+            
+            // 为了避免刚启动 App 时就触发恼人的 su 弹窗去读取表内容（因为 getCount 会顺着找库），
+            // 只有当模式是 STANDARD_API 时，或者用户主动点击了 Refresh 刷新按钮时，才去执行实际数量读取。
+            val count = if (currentMode == BlockedNumbersManager.AccessMode.STANDARD_API || forceRootCheck) {
+                runCatching { manager.getCount(currentMode) }.getOrDefault(-1)
+            } else {
+                -1 // 返回 -1 表示目前尚未去提取真实条数
+            }
+            
             withContext(Dispatchers.Main) {
                 updateModeUI(currentMode, count)
                 setLoadingState(false)
+                appendLog("Mode detected: $currentMode, Count: $count")
             }
         }
     }
@@ -178,21 +216,32 @@ class MainActivity : AppCompatActivity() {
         val hasAccess = mode != BlockedNumbersManager.AccessMode.UNAVAILABLE
         binding.btnExport.isEnabled = hasAccess
         binding.btnImport.isEnabled = hasAccess
-        // 无权限时显示「设为默认拨号器」引导卡片
+        // 只要不是 STANDARD_API，就始终显示「设为默认拨号器」引导卡片（推荐官方做法）
         binding.cardDefaultDialer.visibility =
-            if (mode == BlockedNumbersManager.AccessMode.UNAVAILABLE) View.VISIBLE else View.GONE
+            if (mode != BlockedNumbersManager.AccessMode.STANDARD_API) View.VISIBLE else View.GONE
     }
 
     // ── 默认拨号器引导 ───────────────────────────────────────────
 
     private fun requestBecomeDefaultDialer() {
-        // TelecomManager.ACTION_CHANGE_DEFAULT_DIALER 在 API 23+ 可用，minSdk=26 无需额外判断
-        val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
-            .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
         try {
-            defaultDialerLauncher.launch(intent)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // API 29+ 必须使用 RoleManager
+                val roleManager = getSystemService(Context.ROLE_SERVICE) as RoleManager
+                if (roleManager.isRoleAvailable(RoleManager.ROLE_DIALER)) {
+                    val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                    defaultDialerLauncher.launch(intent)
+                } else {
+                    appendLog("RoleManager: ROLE_DIALER not available")
+                }
+            } else {
+                // API 23 到 28 的旧方法
+                val intent = Intent(TelecomManager.ACTION_CHANGE_DEFAULT_DIALER)
+                    .putExtra(TelecomManager.EXTRA_CHANGE_DEFAULT_DIALER_PACKAGE_NAME, packageName)
+                defaultDialerLauncher.launch(intent)
+            }
         } catch (e: Exception) {
-            appendLog(getString(R.string.error_default_dialer))
+            appendLog(getString(R.string.error_default_dialer) + ": ${e.message}")
         }
     }
 
@@ -271,7 +320,7 @@ class MainActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     setLoadingState(false)
                     appendLog(getString(R.string.import_success, result.added, result.skipped, result.failed))
-                    detectAndUpdateMode()  // 刷新计数
+                    detectAndUpdateMode(forceRootCheck = true)  // 刷新计数，因为发生了实质性写入
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -291,6 +340,10 @@ class MainActivity : AppCompatActivity() {
             binding.btnExport.isEnabled = false
             binding.btnImport.isEnabled = false
         }
+    }
+
+    fun appendLogPublic(message: String) {
+        appendLog(message)
     }
 
     private fun appendLog(message: String) {

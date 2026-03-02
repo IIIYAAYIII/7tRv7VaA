@@ -17,33 +17,44 @@ object RootHelper {
 
     private const val TAG = "RootHelper"
     private const val TIMEOUT_MS = 8000L
+    
+    // 全局日志回调，用于将底层错误输出到 UI
+    var logger: ((String) -> Unit)? = null
 
     /**
      * 已知的 blocked_numbers.db 路径列表（按优先级）
      * 不同厂商/AOSP 版本可能使用不同目录
      */
     val KNOWN_DB_PATHS = listOf(
+        // 高版本 Android (14/15/16) 的专用系统库（BlockedNumberProvider）
+        "/data/user_de/0/com.android.providers.blockednumber/databases/blockednumbers.db",
+        "/data/data/com.android.providers.blockednumber/databases/blockednumbers.db",
+        // 高版本 Android 备选
+        "/data/user_de/0/com.android.providers.telephony/databases/bdata.db",
+        "/data/data/com.android.providers.telephony/databases/bdata.db",
+        // 传统/旧版本的库
         "/data/data/com.android.providers.contacts/databases/blocked_numbers.db",
         "/data/user/0/com.android.providers.contacts/databases/blocked_numbers.db",
         "/data/data/com.google.android.dialer/databases/blocked_numbers.db",
         "/data/user/0/com.google.android.dialer/databases/blocked_numbers.db"
     )
 
+    /** 根据数据库的文件名判断应该使用哪个表名 */
+    private fun getTableName(dbPath: String): String {
+        return if (dbPath.endsWith("bdata.db")) "blocked"
+               else if (dbPath.endsWith("blockednumbers.db")) "blocked"
+               else "blocked_numbers"
+    }
+
     // ── 公开 API ────────────────────────────────────────────────
 
     /**
      * 检测设备是否具有 Root 权限。
-     * 先确认 su 二进制存在，再实际执行一条命令验证授权。
+     * 为了避免在 App 启动时就立刻弹出烦人的 su 授权弹窗，这里仅执行静态的二进制文件检查。
+     * 真正的授权弹窗会在后续第一次实际执行 Root 挂载时触发。
      */
     fun isRootAvailable(): Boolean {
-        if (!isSuBinaryPresent()) return false
-        return try {
-            val result = execAsRoot("id")
-            result.contains("uid=0")
-        } catch (e: Exception) {
-            Log.w(TAG, "Root check failed: ${e.message}")
-            false
-        }
+        return isSuBinaryPresent()
     }
 
     /**
@@ -64,12 +75,18 @@ object RootHelper {
     fun findBlockedNumbersDbPath(): String? {
         for (path in KNOWN_DB_PATHS) {
             try {
-                val result = execAsRoot("ls \"$path\" 2>/dev/null && echo EXISTS")
-                if (result.contains("EXISTS")) return path
+                // 使用 Root 权限下的 stat 或 ls 工具判断文件是否存在（比 cat /dev/null 更通用）
+                // 部分精简系统没有 stat，使用 ls 即可。如果存在则会输出文件名
+                val result = execAsRoot("if [ -f \"$path\" ]; then echo EXISTS; fi")
+                if (result.contains("EXISTS")) {
+                    logger?.invoke("Found DB at: $path")
+                    return path
+                }
             } catch (e: Exception) {
                 continue
             }
         }
+        logger?.invoke("Blocked numbers DB not found in known paths.")
         return null
     }
 
@@ -77,7 +94,8 @@ object RootHelper {
      * 通过 sqlite3 读取拦截号码列表（需 sqlite3 可用）
      */
     fun readBlockedNumbersViaSqlite(dbPath: String): List<String> {
-        val result = execAsRoot("sqlite3 \"$dbPath\" 'SELECT original_number FROM blocked_numbers;'")
+        val tableName = getTableName(dbPath)
+        val result = execAsRoot("sqlite3 \"$dbPath\" 'SELECT original_number FROM $tableName;'")
         return result.lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
@@ -89,12 +107,13 @@ object RootHelper {
      */
     fun insertBlockedNumbersViaSqlite(dbPath: String, numbers: List<String>): Int {
         var count = 0
+        val tableName = getTableName(dbPath)
         numbers.forEach { number ->
             val sanitized = number.replace("'", "''") // SQL 转义
             try {
                 execAsRoot(
                     "sqlite3 \"$dbPath\" " +
-                    "\"INSERT OR IGNORE INTO blocked_numbers(original_number,e164_number) " +
+                    "\"INSERT OR IGNORE INTO $tableName(original_number,e164_number) " +
                     "VALUES('$sanitized','$sanitized');\""
                 )
                 count++
@@ -109,7 +128,8 @@ object RootHelper {
      * 通过 sqlite3 删除所有拦截号码（清空表）
      */
     fun clearBlockedNumbersViaSqlite(dbPath: String) {
-        execAsRoot("sqlite3 \"$dbPath\" 'DELETE FROM blocked_numbers;'")
+        val tableName = getTableName(dbPath)
+        execAsRoot("sqlite3 \"$dbPath\" 'DELETE FROM $tableName;'")
     }
 
     /**
@@ -119,10 +139,19 @@ object RootHelper {
     fun copyDbToCache(dbPath: String, cacheDir: File): File? {
         val dest = File(cacheDir, "blocked_numbers_copy.db")
         return try {
-            execAsRoot("cp \"$dbPath\" \"${dest.absolutePath}\" && chmod 644 \"${dest.absolutePath}\"")
-            if (dest.exists() && dest.length() > 0) dest else null
+            // Android 14+ SELinux 会拦截普通的 cp，使用 cat 绕过
+            execAsRoot("cat \"$dbPath\" > \"${dest.absolutePath}\" && chmod 644 \"${dest.absolutePath}\"")
+            if (dest.exists() && dest.length() > 0) {
+                logger?.invoke("Successfully copied DB to cache using cat.")
+                dest
+            } else {
+                logger?.invoke("DB copy to cache is empty or missing.")
+                null
+            }
         } catch (e: Exception) {
-            Log.e(TAG, "copyDbToCache failed: ${e.message}")
+            val msg = "copyDbToCache failed: ${e.message}"
+            Log.e(TAG, msg)
+            logger?.invoke(msg)
             null
         }
     }
@@ -132,14 +161,18 @@ object RootHelper {
      */
     fun copyDbBackToSystem(localDb: File, dbPath: String): Boolean {
         return try {
+            // Android 14+ SELinux，同样使用 cat 回写
             execAsRoot(
-                "cp \"${localDb.absolutePath}\" \"$dbPath\" && " +
+                "cat \"${localDb.absolutePath}\" > \"$dbPath\" && " +
                 "chmod 660 \"$dbPath\" && " +
-                "chown system:system \"$dbPath\""
+                "chown system:system \"$dbPath\" || chown radio:radio \"$dbPath\""
             )
+            logger?.invoke("Successfully copied DB back to system.")
             true
         } catch (e: Exception) {
-            Log.e(TAG, "copyDbBack failed: ${e.message}")
+            val msg = "copyDbBack failed: ${e.message}"
+            Log.e(TAG, msg)
+            logger?.invoke(msg)
             false
         }
     }
@@ -168,7 +201,10 @@ object RootHelper {
         Log.d(TAG, "execAsRoot: exit=$exitCode  stdout='${stdout.take(200)}'  stderr='${stderr.take(200)}'")
 
         if (exitCode != 0 && stderr.isNotBlank()) {
-            Log.w(TAG, "Root cmd stderr: $stderr")
+            val errStr = "Root cmd stderr: $stderr (Code: $exitCode, Cmd: $command)"
+            Log.w(TAG, errStr)
+            logger?.invoke(errStr)
+            throw RuntimeException(errStr)
         }
         return stdout.trim()
     }
