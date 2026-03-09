@@ -21,8 +21,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage;
 
 /**
  * Random PIN Xposed模块
- * 实现锁屏PIN码乱序显示
- * 支持安卓10-16 (API 29-35+)
+ * 实现锁屏PIN码乱序显示 + 双击空白处锁屏
+ * 支持安卓10-16 (API 29-36+)
  */
 public class MainHook implements IXposedHookLoadPackage {
     
@@ -31,14 +31,14 @@ public class MainHook implements IXposedHookLoadPackage {
     
     @Override
     public void handleLoadPackage(XC_LoadPackage.LoadPackageParam lpparam) throws Throwable {
-        // 我们需要 Hook 两个包: systemui (锁屏密码) 和 android (系统服务, 用于双击壁纸)
+        // Hook 系统服务处理双击壁纸逻辑 (system_server 进程)
         if (lpparam.packageName.equals("android")) {
-            // Hook 系统服务处理双击壁纸逻辑
-            DoubleTapLock.hookWallpaperTap(lpparam.classLoader);
+            XposedBridge.log("[" + TAG + "] Hooking system_server for double tap lock");
+            DoubleTapLock.hook(lpparam.classLoader);
             return;
         }
 
-        // Hook 模块自身的 UI界面，用于向用户展示“已激活”状态
+        // Hook 模块自身的 UI界面，用于向用户展示"已激活"状态
         if (lpparam.packageName.equals("com.randompin.xposed")) {
             XposedHelpers.findAndHookMethod(
                 "com.randompin.xposed.SettingsActivity",
@@ -49,15 +49,13 @@ public class MainHook implements IXposedHookLoadPackage {
             return;
         }
 
+        // 只处理 SystemUI 相关的包
         if (!lpparam.packageName.toLowerCase().contains("systemui")) {
             return;
         }
         
-        // Android 16 可能在 Framework 层找不到 sendWallpaperCommand，因此在 SystemUI 层级也挂载备用全屏触摸监听
-        DoubleTapLock.hookSystemUIWallpaperTap(lpparam.classLoader);
-        
         int sdk = Build.VERSION.SDK_INT;
-        XposedBridge.log("[" + TAG + "] Hooking SystemUI, SDK=" + sdk);
+        XposedBridge.log("[" + TAG + "] Hooking SystemUI, SDK=" + sdk + ", package=" + lpparam.packageName);
         
         // 根据安卓版本选择不同的Hook方式
         if (sdk >= 35) {
@@ -78,9 +76,7 @@ public class MainHook implements IXposedHookLoadPackage {
      */
     private void hookAndroid15Plus(XC_LoadPackage.LoadPackageParam lpparam) {
         XposedBridge.log("[" + TAG + "] Applying Android 15+ hooks");
-        Android15Hooks.hookKeyguardBouncer(lpparam.classLoader);
-        Android15Hooks.hookNumPadAnimationController(lpparam.classLoader);
-        Android15Hooks.hookLockIconViewController(lpparam.classLoader);
+        Android15Hooks.hook(lpparam.classLoader);
     }
     
     /**
@@ -110,18 +106,6 @@ public class MainHook implements IXposedHookLoadPackage {
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
                         ViewGroup view = (ViewGroup) param.thisObject;
                         randomizePINButtons(view);
-                    }
-                }
-            );
-            
-            // Hook 密码验证方法，需要正确映射乱序后的按钮
-            XposedHelpers.findAndHookMethod(
-                keyguardPINViewClass,
-                "verifyPasswordAndUnlock",
-                new XC_MethodHook() {
-                    @Override
-                    protected void beforeHookedMethod(MethodHookParam param) throws Throwable {
-                        // 处理密码验证
                     }
                 }
             );
@@ -224,7 +208,7 @@ public class MainHook implements IXposedHookLoadPackage {
                 pinContainer.addView(button);
             }
             
-            XposedBridge.log("[" + TAG + "] PIN buttons randomized successfully");
+            XposedBridge.log("[" + TAG + "] PIN buttons randomized successfully, count=" + digitButtons.size());
             
         } catch (Throwable t) {
             XposedBridge.log("[" + TAG + "] Error randomizing PIN buttons: " + t.getMessage());
