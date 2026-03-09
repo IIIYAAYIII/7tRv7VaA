@@ -49,12 +49,40 @@ object RootHelper {
     // ── 公开 API ────────────────────────────────────────────────
 
     /**
-     * 检测设备是否具有 Root 权限。
-     * 为了避免在 App 启动时就立刻弹出烦人的 su 授权弹窗，这里仅执行静态的二进制文件检查。
-     * 真正的授权弹窗会在后续第一次实际执行 Root 挂载时触发。
+     * 检测设备是否具有 Root 权限（仅静态检查 su 二进制是否存在）。
+     * 此方法不触发 root 授权弹窗，用于快速预判。
      */
     fun isRootAvailable(): Boolean {
         return isSuBinaryPresent()
+    }
+
+    /**
+     * 实际验证 Root 权限是否可用。
+     * 此方法会触发 Magisk 授权弹窗（如果尚未授权），并验证权限是否真正生效。
+     * 应在后台线程调用。
+     * @return true 表示 root 权限已授权且可用
+     */
+    fun checkRootPermission(): Boolean {
+        if (!isSuBinaryPresent()) {
+            logger?.invoke("su binary not found")
+            return false
+        }
+        return try {
+            // 执行一个简单的 root 命令来触发授权并验证权限
+            val result = execAsRoot("id")
+            val hasRoot = result.contains("uid=0") || result.contains("root")
+            if (hasRoot) {
+                logger?.invoke("Root permission granted: $result")
+            } else {
+                logger?.invoke("Root permission denied or not working: $result")
+            }
+            hasRoot
+        } catch (e: Exception) {
+            val msg = "Root permission check failed: ${e.message}"
+            Log.e(TAG, msg)
+            logger?.invoke(msg)
+            false
+        }
     }
 
     /**

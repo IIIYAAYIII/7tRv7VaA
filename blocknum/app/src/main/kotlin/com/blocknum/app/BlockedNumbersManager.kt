@@ -43,7 +43,8 @@ class BlockedNumbersManager(private val context: Context) {
         // canCurrentUserBlockNumbers 在 API 24+ 可用，minSdk=26 无需额外版本判断
         if (!BlockedNumberContract.canCurrentUserBlockNumbers(context)) {
             Log.i(TAG, "Not primary user, cannot use BlockedNumberContract")
-            return if (RootHelper.isRootAvailable()) AccessMode.ROOT else AccessMode.UNAVAILABLE
+            // 需要实际验证 root 权限，而不仅仅是检查 su 二进制存在
+            return if (RootHelper.checkRootPermission()) AccessMode.ROOT else AccessMode.UNAVAILABLE
         }
 
         // Step 2: 尝试标准 ContentProvider 访问（会因无权限抛 SecurityException）
@@ -57,10 +58,12 @@ class BlockedNumbersManager(private val context: Context) {
             AccessMode.STANDARD_API
         } catch (e: SecurityException) {
             Log.i(TAG, "Standard API denied (not default dialer): ${e.message}")
-            if (RootHelper.isRootAvailable()) AccessMode.ROOT else AccessMode.UNAVAILABLE
+            // 需要实际验证 root 权限，而不仅仅是检查 su 二进制存在
+            if (RootHelper.checkRootPermission()) AccessMode.ROOT else AccessMode.UNAVAILABLE
         } catch (e: Exception) {
             Log.w(TAG, "Standard API unexpected error: ${e.message}")
-            if (RootHelper.isRootAvailable()) AccessMode.ROOT else AccessMode.UNAVAILABLE
+            // 需要实际验证 root 权限，而不仅仅是检查 su 二进制存在
+            if (RootHelper.checkRootPermission()) AccessMode.ROOT else AccessMode.UNAVAILABLE
         }
     }
 
