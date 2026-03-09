@@ -24,6 +24,12 @@ public class Android15Hooks {
     private static final int TAG_RANDOMIZED = 0x52414E44; // "RAND" 标记
     private static final int TAG_CONTAINER_TRACKED = 0x54524143; // "TRAC" 标记 - 追踪中的容器
     
+    public static void hook(ClassLoader classLoader) {
+        hookKeyguardBouncer(classLoader);
+        hookLockIconViewController(classLoader);
+        hookNumPadAnimationController(classLoader);
+    }
+
     public static void hookKeyguardBouncer(ClassLoader classLoader) {
         // 安卓16不再通过外部 Bouncer 触发，而是直接监听底部 NumPadKey 的生成
     }
