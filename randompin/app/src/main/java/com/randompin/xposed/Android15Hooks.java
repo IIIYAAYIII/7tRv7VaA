@@ -18,7 +18,7 @@ import de.robv.android.xposed.XposedHelpers;
 public class Android15Hooks {
     
     private static final String TAG = "RandomPIN-A16";
-    private static boolean hasRandomized = false;
+    private static final int TAG_RANDOMIZED = 0x52414E44; // "RAND" 标记
     
     public static void hookKeyguardBouncer(ClassLoader classLoader) {
         // 安卓16不再通过外部 Bouncer 触发，而是直接监听底部 NumPadKey 的生成
@@ -49,13 +49,14 @@ public class Android15Hooks {
                         View keyObj = (View) param.thisObject;
                         ViewGroup parent = (ViewGroup) keyObj.getParent();
                         
-                        if (parent != null && !hasRandomized) {
+                        if (parent != null && parent.getTag(TAG_RANDOMIZED) == null) {
                             // 为了防抖，延迟一瞬间等所有兄弟节点都加进来后再洗牌
+                            final ViewGroup containerRef = parent;
                             parent.post(new Runnable() {
                                 @Override
                                 public void run() {
-                                    if (!hasRandomized) {
-                                        doHardRandomize(parent);
+                                    if (containerRef.getTag(TAG_RANDOMIZED) == null) {
+                                        doHardRandomize(containerRef);
                                     }
                                 }
                             });
@@ -76,8 +77,8 @@ public class Android15Hooks {
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        hasRandomized = false;
-                        XposedBridge.log("[" + TAG + "] Bouncer hidden, reset state.");
+                        // Bouncer隐藏时无需重置，因为使用View.Tag标记
+                        XposedBridge.log("[" + TAG + "] Bouncer hidden.");
                     }
                 }
             );
@@ -130,7 +131,7 @@ public class Android15Hooks {
                 container.addView(btn);
             }
             
-            hasRandomized = true;
+            container.setTag(TAG_RANDOMIZED, Boolean.TRUE);
             XposedBridge.log("[" + TAG + "] Hard Randomized 10 PIN Buttons successfully!");
             
         } catch (Throwable t) {

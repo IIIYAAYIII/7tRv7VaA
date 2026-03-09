@@ -4,14 +4,14 @@ plugins {
 
 android {
     namespace = "com.randompin.xposed"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.randompin.xposed"
         minSdk = 29
-        targetSdk = 35
-        versionCode = 18
-        versionName = "1.8"
+        targetSdk = 36
+        versionCode = 19
+        versionName = "1.9"
     }
 
     signingConfigs {

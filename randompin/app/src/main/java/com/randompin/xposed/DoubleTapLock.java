@@ -111,24 +111,66 @@ public class DoubleTapLock {
     
     private static void lockScreen(Object serviceContext) {
         try {
-            // 尝试从服务上下文中获取 Context
             Context mContext = null;
+            
+            // 尝试多种方式获取 Context
             try {
                 mContext = (Context) XposedHelpers.getObjectField(serviceContext, "mContext");
-            } catch (Throwable e) {
-                // Ignore
-            }
-            
-            if (mContext != null) {
-                PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-                if (pm != null) {
-                    XposedHelpers.callMethod(pm, "goToSleep", SystemClock.uptimeMillis());
-                    return;
+            } catch (Throwable e1) {
+                try {
+                    // 尝试调用 getContext() 方法
+                    mContext = (Context) XposedHelpers.callMethod(serviceContext, "getContext");
+                } catch (Throwable e2) {
+                    // 使用静态方式获取 SystemUI Context
+                    try {
+                        Class<?> activityThreadClass = XposedHelpers.findClass("android.app.ActivityThread", null);
+                        Object currentActivityThread = XposedHelpers.callStaticMethod(activityThreadClass, "currentActivityThread");
+                        mContext = (Context) XposedHelpers.callMethod(currentActivityThread, "getSystemContext");
+                    } catch (Throwable e3) {
+                        XposedBridge.log("[" + TAG + "] Failed to get Context: " + e3.getMessage());
+                    }
                 }
             }
             
-            // 如果获取不到 Context，执行底层的 shell 锁屏命令作为终极保底
-            Runtime.getRuntime().exec("input keyevent 26");
+            if (mContext != null) {
+                // 方案1: 使用 PowerManager.goToSleep (需要 DEVICE_POWER 权限，在 SystemUI 进程中有效)
+                try {
+                    PowerManager pm = (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
+                    if (pm != null) {
+                        XposedHelpers.callMethod(pm, "goToSleep", SystemClock.uptimeMillis());
+                        XposedBridge.log("[" + TAG + "] Screen locked via PowerManager.goToSleep");
+                        return;
+                    }
+                } catch (Throwable e) {
+                    XposedBridge.log("[" + TAG + "] goToSleep failed: " + e.getMessage());
+                }
+                
+                // 方案2: 发送休眠广播 (Android 10+ 部分设备有效)
+                try {
+                    mContext.sendBroadcast(new android.content.Intent("android.intent.action.CLOSE_SYSTEM_DIALOGS"));
+                    android.os.Handler handler = new android.os.Handler(mContext.getMainLooper());
+                    handler.postDelayed(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                Runtime.getRuntime().exec("input keyevent 26");
+                            } catch (Throwable ignored) {}
+                        }
+                    }, 100);
+                    XposedBridge.log("[" + TAG + "] Screen lock triggered via broadcast + keyevent");
+                    return;
+                } catch (Throwable e) {
+                    XposedBridge.log("[" + TAG + "] Broadcast method failed: " + e.getMessage());
+                }
+            }
+            
+            // 方案3: 终极保底 - 执行 shell 命令锁屏
+            try {
+                Runtime.getRuntime().exec("input keyevent 26");
+                XposedBridge.log("[" + TAG + "] Screen locked via input keyevent 26");
+            } catch (Throwable e) {
+                XposedBridge.log("[" + TAG + "] All lock methods failed: " + e.getMessage());
+            }
             
         } catch (Throwable t) {
             XposedBridge.log("[" + TAG + "] Error locking screen: " + t.getMessage());

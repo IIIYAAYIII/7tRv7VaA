@@ -98,7 +98,7 @@ public class MainHook implements IXposedHookLoadPackage {
     private void hookGenericPINView(XC_LoadPackage.LoadPackageParam lpparam, String className) {
         try {
             Class<?> keyguardPINViewClass = XposedHelpers.findClass(
-                "com.android.keyguard.KeyguardPINView",
+                className,
                 lpparam.classLoader
             );
             
