@@ -176,15 +176,20 @@ public class MainHook implements IXposedHookLoadPackage {
                 return;
             }
             
-            // 收集所有数字按钮
+            // 收集所有数字按钮以及它们的原始空间属性
             List<View> digitButtons = new ArrayList<>();
             List<View> otherButtons = new ArrayList<>();
+            
+            List<Integer> originalIds = new ArrayList<>();
+            List<ViewGroup.LayoutParams> originalLayoutParams = new ArrayList<>();
             
             for (int i = 0; i < pinContainer.getChildCount(); i++) {
                 View child = pinContainer.getChildAt(i);
                 
                 if (isDigitButton(child)) {
                     digitButtons.add(child);
+                    originalIds.add(child.getId());
+                    originalLayoutParams.add(child.getLayoutParams());
                 } else {
                     otherButtons.add(child);
                 }
@@ -195,17 +200,33 @@ public class MainHook implements IXposedHookLoadPackage {
                 return;
             }
             
-            // 随机打乱数字按钮顺序
+            // 随机打乱数字按钮引用顺序
             Collections.shuffle(digitButtons, new Random());
             
-            // 重新排列按钮
+            // 恢复属性到洗牌后的 View 上，确保 ConstraintLayout 能正常约束它们
+            for (int i = 0; i < digitButtons.size(); i++) {
+                View shuffledBtn = digitButtons.get(i);
+                shuffledBtn.setId(originalIds.get(i));
+                shuffledBtn.setLayoutParams(originalLayoutParams.get(i));
+            }
+            
+            // 收集原始整个顺序
+            List<View> originalChildren = new ArrayList<>();
+            for (int i = 0; i < pinContainer.getChildCount(); i++) {
+                originalChildren.add(pinContainer.getChildAt(i));
+            }
+            
+            // 重新重组试图
             pinContainer.removeAllViews();
             
-            for (View button : digitButtons) {
-                pinContainer.addView(button);
-            }
-            for (View button : otherButtons) {
-                pinContainer.addView(button);
+            int digitIndex = 0;
+            for (View original : originalChildren) {
+                if (isDigitButton(original) && digitIndex < digitButtons.size()) {
+                    pinContainer.addView(digitButtons.get(digitIndex));
+                    digitIndex++;
+                } else {
+                    pinContainer.addView(original);
+                }
             }
             
             XposedBridge.log("[" + TAG + "] PIN buttons randomized successfully, count=" + digitButtons.size());

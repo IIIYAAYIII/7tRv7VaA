@@ -366,6 +366,37 @@ public class DoubleTapLock {
      */
     private static void lockScreen() {
         try {
+            // 方案0: 终极方案，如果我们在 system_server (android)，直接调用底层的 IWindowManager.lockNow
+            // 这可以完全绕过 Android 15/16 针对普通应用、服务或反射 PowerManager 增加的各种限制安全策略
+            try {
+                // IBinder b = ServiceManager.getService(Context.WINDOW_SERVICE);
+                Class<?> serviceManagerClass = XposedHelpers.findClass("android.os.ServiceManager", null);
+                Object windowServiceBinder = XposedHelpers.callStaticMethod(serviceManagerClass, "getService", Context.WINDOW_SERVICE);
+                
+                if (windowServiceBinder != null) {
+                    // IWindowManager wm = IWindowManager.Stub.asInterface(b);
+                    Class<?> stubClass = XposedHelpers.findClass("android.view.IWindowManager$Stub", null);
+                    Object iWindowManager = XposedHelpers.callStaticMethod(stubClass, "asInterface", windowServiceBinder);
+                    
+                    if (iWindowManager != null) {
+                        // wm.lockNow(null); 或者 wm.lockNow(); (不同 Android 版本参数可能不同)
+                        try {
+                            XposedHelpers.callMethod(iWindowManager, "lockNow", (Object) null);
+                        } catch (Throwable t) {
+                            try {
+                                XposedHelpers.callMethod(iWindowManager, "lockNow");
+                            } catch (Throwable t2) {
+                                throw t2;
+                            }
+                        }
+                        XposedBridge.log("[" + TAG + "] Screen locked via robust IWindowManager.lockNow in system_server");
+                        return;
+                    }
+                }
+            } catch (Throwable e) {
+                XposedBridge.log("[" + TAG + "] IWindowManager.lockNow failed: " + e.getMessage());
+            }
+            
             Context context = getSystemContext();
             if (context == null) {
                 XposedBridge.log("[" + TAG + "] Failed to get context, trying shell command");
@@ -381,11 +412,10 @@ public class DoubleTapLock {
                 }
             } catch (Throwable ignored) {}
             
-            // 方案2: 使用 PowerManager.goToSleep (需要系统权限)
+            // 方案2: 使用 PowerManager.goToSleep
             try {
                 PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
                 if (pm != null) {
-                    // Android 13+ 需要使用反射调用内部方法
                     Method goToSleep = PowerManager.class.getDeclaredMethod("goToSleep", long.class);
                     goToSleep.setAccessible(true);
                     goToSleep.invoke(pm, SystemClock.uptimeMillis());
@@ -393,21 +423,18 @@ public class DoubleTapLock {
                     return;
                 }
             } catch (Throwable e) {
-                XposedBridge.log("[" + TAG + "] goToSleep failed: " + e.getMessage());
+                XposedBridge.log("[" + TAG + "] goToSleep failed (Expected on A15+): " + e.getMessage());
             }
             
-            // 方案3: 使用 WindowManager 收缩状态栏然后发送电源键事件
+            // 方案3: 使用普通 WindowManager 的 lockNow
             try {
                 WindowManager wm = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
                 if (wm != null) {
-                    // Android 11+ 通过 WindowManager 锁屏的方法
-                    try {
-                        Method lockNow = wm.getClass().getDeclaredMethod("lockNow");
-                        lockNow.setAccessible(true);
-                        lockNow.invoke(wm);
-                        XposedBridge.log("[" + TAG + "] Screen locked via WindowManager.lockNow");
-                        return;
-                    } catch (Throwable ignored) {}
+                    Method lockNow = wm.getClass().getDeclaredMethod("lockNow");
+                    lockNow.setAccessible(true);
+                    lockNow.invoke(wm);
+                    XposedBridge.log("[" + TAG + "] Screen locked via context WindowManager.lockNow");
+                    return;
                 }
             } catch (Throwable e) {
                 XposedBridge.log("[" + TAG + "] WindowManager lock failed: " + e.getMessage());

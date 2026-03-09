@@ -49,91 +49,98 @@ public class Android15Hooks {
                 classLoader
             );
             
-            // 当任何一个数字按键解析布局完成时
-            XposedHelpers.findAndHookMethod(
+            // 安卓15后期和16中，NumPadKey 不再显式重写 onFinishInflate，直接 Exact Hook 会报错
+            // 改为 Hook 构造函数，并在附着到窗口时执行逻辑
+            XposedBridge.hookAllConstructors(
                 numPadKeyClass,
-                "onFinishInflate",
                 new XC_MethodHook() {
                     @Override
                     protected void afterHookedMethod(MethodHookParam param) throws Throwable {
-                        View keyObj = (View) param.thisObject;
+                        final View keyObj = (View) param.thisObject;
                         
-                        // 延迟获取父容器，确保父容器已经完全构建
-                        keyObj.post(new Runnable() {
+                        keyObj.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
                             @Override
-                            public void run() {
-                                ViewGroup parent = (ViewGroup) keyObj.getParent();
-                                if (parent == null) {
-                                    // 继续向上查找
-                                    return;
-                                }
-                                
-                                // 找到PIN键盘的根容器（通常包含10个数字键）
-                                ViewGroup pinContainer = findPINContainer(parent);
-                                if (pinContainer == null) {
-                                    XposedBridge.log("[" + TAG + "] PIN container not found yet, will retry");
-                                    return;
-                                }
-                                
-                                // 检查是否已经洗牌过
-                                if (pinContainer.getTag(TAG_RANDOMIZED) != null) {
-                                    return;
-                                }
-                                
-                                // 避免重复添加监听器
-                                if (pinContainer.getTag(TAG_CONTAINER_TRACKED) != null) {
-                                    return;
-                                }
-                                
-                                // 标记为追踪中
-                                pinContainer.setTag(TAG_CONTAINER_TRACKED, Boolean.TRUE);
-                                
-                                // 使用 ViewTreeObserver 监听全局布局完成
-                                final ViewGroup containerRef = pinContainer;
-                                ViewTreeObserver.OnGlobalLayoutListener layoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
-                                    private int lastChildCount = 0;
-                                    private int stableCount = 0;
-                                    
-                                    @Override
-                                    public void onGlobalLayout() {
-                                        int childCount = countDigitButtons(containerRef);
-                                        
-                                        // 等待子View数量稳定（连续两次检测到相同数量且>=10）
-                                        if (childCount >= 10) {
-                                            if (childCount == lastChildCount) {
-                                                stableCount++;
-                                                if (stableCount >= 2) {
-                                                    // 布局稳定，执行洗牌
-                                                    if (containerRef.getTag(TAG_RANDOMIZED) == null) {
-                                                        doHardRandomize(containerRef);
-                                                    }
-                                                    // 移除监听器
-                                                    containerRef.getViewTreeObserver().removeOnGlobalLayoutListener(this);
-                                                    containerRef.setTag(TAG_CONTAINER_TRACKED, null);
-                                                }
-                                            } else {
-                                                stableCount = 0;
-                                            }
-                                            lastChildCount = childCount;
-                                        }
-                                    }
-                                };
-                                
-                                containerRef.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
-                                
-                                // 同时也执行一次立即检查（某些设备可能不需要等待）
-                                containerRef.postDelayed(new Runnable() {
+                            public void onViewAttachedToWindow(View v) {
+                                // 延迟获取父容器，确保父容器和同级元素已经完全构建
+                                keyObj.post(new Runnable() {
                                     @Override
                                     public void run() {
-                                        if (containerRef.getTag(TAG_RANDOMIZED) == null) {
-                                            int digitCount = countDigitButtons(containerRef);
-                                            if (digitCount >= 10) {
-                                                doHardRandomize(containerRef);
-                                                containerRef.setTag(TAG_CONTAINER_TRACKED, null);
-                                            }
+                                        ViewGroup parent = (ViewGroup) keyObj.getParent();
+                                        if (parent == null) {
+                                            return;
                                         }
+                                        
+                                        // 找到PIN键盘的根容器（通常包含10个数字键）
+                                        ViewGroup pinContainer = findPINContainer(parent);
+                                        if (pinContainer == null) {
+                                            return;
+                                        }
+                                        
+                                        // 检查是否已经洗牌过
+                                        if (pinContainer.getTag(TAG_RANDOMIZED) != null) {
+                                            return;
+                                        }
+                                        
+                                        // 避免重复添加监听器
+                                        if (pinContainer.getTag(TAG_CONTAINER_TRACKED) != null) {
+                                            return;
+                                        }
+                                        
+                                        // 标记为追踪中
+                                        pinContainer.setTag(TAG_CONTAINER_TRACKED, Boolean.TRUE);
+                                        
+                                        // 使用 ViewTreeObserver 监听全局布局完成
+                                        final ViewGroup containerRef = pinContainer;
+                                        ViewTreeObserver.OnGlobalLayoutListener layoutListener = new ViewTreeObserver.OnGlobalLayoutListener() {
+                                            private int lastChildCount = 0;
+                                            private int stableCount = 0;
+                                            
+                                            @Override
+                                            public void onGlobalLayout() {
+                                                int childCount = countDigitButtons(containerRef);
+                                                
+                                                // 等待子View数量稳定（连续两次检测到相同数量且>=10）
+                                                if (childCount >= 10) {
+                                                    if (childCount == lastChildCount) {
+                                                        stableCount++;
+                                                        if (stableCount >= 2) {
+                                                            // 布局稳定，执行洗牌
+                                                            if (containerRef.getTag(TAG_RANDOMIZED) == null) {
+                                                                doHardRandomize(containerRef);
+                                                            }
+                                                            // 移除监听器
+                                                            containerRef.getViewTreeObserver().removeOnGlobalLayoutListener(this);
+                                                            containerRef.setTag(TAG_CONTAINER_TRACKED, null);
+                                                        }
+                                                    } else {
+                                                        stableCount = 0;
+                                                    }
+                                                    lastChildCount = childCount;
+                                                }
+                                            }
+                                        };
+                                        
+                                        containerRef.getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
+                                        
+                                        // 同时也执行一次立即检查（某些设备可能不需要等待）
+                                        containerRef.postDelayed(new Runnable() {
+                                            @Override
+                                            public void run() {
+                                                if (containerRef.getTag(TAG_RANDOMIZED) == null) {
+                                                    int digitCount = countDigitButtons(containerRef);
+                                                    if (digitCount >= 10) {
+                                                        doHardRandomize(containerRef);
+                                                        containerRef.setTag(TAG_CONTAINER_TRACKED, null);
+                                                    }
+                                                }
+                                            }
+                                        }, 150);
                                     }
-                                }, 300);
+                                });
+                            }
+
+                            @Override
+                            public void onViewDetachedFromWindow(View v) {
                             }
                         });
                     }
@@ -261,12 +268,17 @@ public class Android15Hooks {
             List<View> otherButtons = new ArrayList<>();
             
             // 第一步：分类
+            List<Integer> originalIds = new ArrayList<>();
+            List<ViewGroup.LayoutParams> originalLayoutParams = new ArrayList<>();
+            
             for (int i = 0; i < container.getChildCount(); i++) {
                 View child = container.getChildAt(i);
                 Integer digit = getDigitValue(child);
                 if (digit != null && digit >= 0 && digit <= 9) {
                     digitButtons.add(child);
-                    XposedBridge.log("[" + TAG + "] Found digit button: " + digit);
+                    // 保存原位按键的 ID 和 布局约束参数（解决 ConstraintLayout 不受 addView 顺序影响的 Bug）
+                    originalIds.add(child.getId());
+                    originalLayoutParams.add(child.getLayoutParams());
                 } else {
                     otherButtons.add(child);
                 }
@@ -278,12 +290,18 @@ public class Android15Hooks {
                 return;
             }
             
-            // 第二步：洗牌
+            // 第二步：洗牌 View 引用
             Collections.shuffle(digitButtons);
-            XposedBridge.log("[" + TAG + "] Shuffled " + digitButtons.size() + " digit buttons");
             
-            // 第三步：重组 - 保持原有索引位置的含义
-            // 记录原始子View的位置信息
+            // 第三步：把原本的 ID 和 LayoutParams 覆盖回洗牌后的 View 上
+            // 这能够欺骗 ConstraintLayout，让它把洗过的 View 强行约束在原本方块的位置
+            for (int i = 0; i < digitButtons.size(); i++) {
+                View shuffledBtn = digitButtons.get(i);
+                shuffledBtn.setId(originalIds.get(i));
+                shuffledBtn.setLayoutParams(originalLayoutParams.get(i));
+            }
+            
+            // 第四步：重组试图层级 - 保持原有索引位置的含义，但内部 View 已经被掉包
             List<View> originalChildren = new ArrayList<>();
             for (int i = 0; i < container.getChildCount(); i++) {
                 originalChildren.add(container.getChildAt(i));
@@ -291,16 +309,13 @@ public class Android15Hooks {
             
             container.removeAllViews();
             
-            // 按原始顺序重新添加，但用洗牌后的数字按钮替换原来的数字按钮
             int digitIndex = 0;
             for (View original : originalChildren) {
                 Integer digit = getDigitValue(original);
                 if (digit != null && digit >= 0 && digit <= 9 && digitIndex < digitButtons.size()) {
-                    // 这是数字按钮位置，用洗牌后的按钮替换
                     container.addView(digitButtons.get(digitIndex));
                     digitIndex++;
                 } else {
-                    // 非数字按钮，保持原样
                     container.addView(original);
                 }
             }
